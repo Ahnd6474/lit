@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lit docs</title>
+    <meta
+      name="description"
+      content="Beginner-friendly local docs for lit, the local-only and offline-only Git-like version control prototype."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <p class="eyebrow">local docs</p>
+        <h1>lit</h1>
+        <p class="lead">
+          lit means "local git." It is a lightweight, local-only,
+          offline-only version control prototype for one computer.
+        </p>
+        <div class="hero-actions">
+          <a href="#quick-start">Quick start</a>
+          <a href="#commands">Commands</a>
+          <a href="#limits">Limitations</a>
+        </div>
+      </header>
+
+      <main>
+        <section class="card">
+          <h2>What lit is</h2>
+          <p>
+            lit is a CLI-first project for local checkpoints and Git-like
+            version control workflows without any server, account, remote,
+            sync service, or network dependency.
+          </p>
+          <p>
+            The design goal is narrow on purpose: keep local history simple,
+            deterministic, and easy to inspect inside a <code>.lit/</code>
+            directory.
+          </p>
+        </section>
+
+        <section class="grid">
+          <article class="card">
+            <h2>Why local-only</h2>
+            <p>
+              lit is built for one machine. It does not support collaboration,
+              remotes, or hosted workflows.
+            </p>
+          </article>
+          <article class="card">
+            <h2>Why offline-only</h2>
+            <p>
+              lit should stay usable without internet access. No login, no
+              cloud, and no network call should be required to use it.
+            </p>
+          </article>
+        </section>
+
+        <section class="card" id="quick-start">
+          <h2>Installation and local setup</h2>
+          <p>lit currently targets Python 3.12 or newer.</p>
+          <pre><code>python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e .
+lit --help</code></pre>
+          <p>
+            You can also run the module form directly:
+            <code>python -m lit --help</code>
+          </p>
+        </section>
+
+        <section class="card">
+          <h2>Quick start</h2>
+          <pre><code>python -m lit init .
+python -m lit init my-project</code></pre>
+          <p>
+            Successful bootstrap creates local metadata in
+            <code>.lit/</code>, including <code>config.json</code>,
+            <code>HEAD</code>, <code>index.json</code>, object folders, refs,
+            and merge or rebase state files.
+          </p>
+        </section>
+
+        <section class="card" id="commands">
+          <h2>Main commands</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Command</th>
+                <th>Status</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>lit init</code></td>
+                <td>works now</td>
+                <td>Creates or reinitializes a local repository.</td>
+              </tr>
+              <tr>
+                <td><code>lit add</code></td>
+                <td>reserved</td>
+                <td>Planned staging command. not implemented yet.</td>
+              </tr>
+              <tr>
+                <td><code>lit commit</code></td>
+                <td>reserved</td>
+                <td>Planned checkpoint command. not implemented yet.</td>
+              </tr>
+              <tr>
+                <td><code>lit log</code></td>
+                <td>reserved</td>
+                <td>Planned history view. not implemented yet.</td>
+              </tr>
+              <tr>
+                <td><code>lit status</code></td>
+                <td>reserved</td>
+                <td>Planned working tree summary. not implemented yet.</td>
+              </tr>
+              <tr>
+                <td><code>lit diff</code></td>
+                <td>reserved</td>
+                <td>Planned comparison command. not implemented yet.</td>
+              </tr>
+              <tr>
+                <td><code>lit restore</code></td>
+                <td>reserved</td>
+                <td>Planned file restore command. not implemented yet.</td>
+              </tr>
+              <tr>
+                <td><code>lit checkout</code></td>
+                <td>reserved</td>
+                <td>Planned switch command. not implemented yet.</td>
+              </tr>
+              <tr>
+                <td><code>lit branch</code></td>
+                <td>reserved</td>
+                <td>Planned branch command. not implemented yet.</td>
+              </tr>
+              <tr>
+                <td><code>lit merge</code></td>
+                <td>reserved</td>
+                <td>Planned local merge command. not implemented yet.</td>
+              </tr>
+              <tr>
+                <td><code>lit rebase</code></td>
+                <td>reserved</td>
+                <td>Planned local rebase command. not implemented yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="card">
+          <h2>Beginner-friendly example workflow</h2>
+          <ol>
+            <li>Run <code>python -m lit init .</code> in your project folder.</li>
+            <li>Edit or add files.</li>
+            <li>Use <code>lit add</code> when staging support lands.</li>
+            <li>Use <code>lit commit</code> to create checkpoints once implemented.</li>
+            <li>Create a side branch with <code>lit branch</code>.</li>
+            <li>Bring work together with <code>lit merge</code> or <code>lit rebase</code>.</li>
+            <li>Use <code>lit restore</code> or <code>lit checkout</code> to recover or move around history.</li>
+          </ol>
+          <p>
+            Today only the first step is available. The other commands are part
+            of the intended workflow, but they are not implemented yet.
+          </p>
+        </section>
+
+        <section class="grid compare">
+          <article class="card">
+            <h2>Similar to Git</h2>
+            <ul>
+              <li>CLI-first workflow</li>
+              <li>Hidden repository metadata</li>
+              <li>Git-like command names</li>
+              <li>Planned branch, merge, and rebase flow</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h2>Different from Git</h2>
+            <ul>
+              <li>local-only by design</li>
+              <li>offline-only by design</li>
+              <li>no remotes, push, pull, fetch, or clone</li>
+              <li>smaller scope and earlier implementation stage</li>
+            </ul>
+          </article>
+        </section>
+
+        <section class="card" id="limits">
+          <h2>Current limitations and non-goals</h2>
+          <ul>
+            <li>Only <code>lit init</code> is implemented today.</li>
+            <li>The staged-file and commit workflow is not implemented yet.</li>
+            <li>Branch switching, merge execution, and rebase execution are not implemented yet.</li>
+            <li>There are no remotes, no hosted services, and no collaboration features.</li>
+            <li>The site is static HTML and CSS so it can be opened directly or served locally without heavy tooling.</li>
+          </ul>
+        </section>
+
+        <section class="card">
+          <h2>Open this website locally</h2>
+          <p>
+            Open <code>website/index.html</code> directly in a browser, or
+            serve the folder with:
+          </p>
+          <pre><code>python -m http.server --directory website 8000</code></pre>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

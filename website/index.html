@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>lit | local git</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <p class="eyebrow">local git</p>
+        <h1>lit is a lightweight, local-only version control tool.</h1>
+        <p class="lead">
+          Use it for fast local checkpoints on one computer. No account, no server,
+          no sync, no remote, and no network requirement.
+        </p>
+        <div class="hero-actions">
+          <a href="#quick-start">Quick Start</a>
+          <a href="#limitations" class="secondary">Limitations</a>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Why use lit?</h2>
+        <p>
+          `lit` keeps the familiar shape of Git for local work, but drops everything
+          related to remotes and collaboration. It is useful when you want simple,
+          offline checkpoints for code, notes, scripts, or experiments on a single machine.
+        </p>
+        <ul>
+          <li>Local-only and offline-only by design</li>
+          <li>Simple CLI with real branch, merge, and rebase workflows</li>
+          <li>No `push`, `pull`, `fetch`, `clone`, or hosted service</li>
+          <li>No account, login, cloud, daemon, or background sync</li>
+        </ul>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <h2>Installation</h2>
+          <p>`lit` targets Python 3.12+.</p>
+          <pre><code>python -m pip install -e .</code></pre>
+          <p>
+            That installs the `lit` command from this repository. You can then run
+            `lit ...` or `python -m lit ...`.
+          </p>
+        </article>
+
+        <article class="panel" id="quick-start">
+          <h2>Quick start</h2>
+          <pre><code>mkdir demo
+cd demo
+lit init
+printf "hello\n" &gt; note.txt
+lit add note.txt
+lit commit -m "Create first checkpoint"
+lit status
+lit log</code></pre>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>Command overview</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Command</th>
+                <th>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><code>lit init [path]</code></td><td>Create a new <code>.lit</code> repository.</td></tr>
+              <tr><td><code>lit add &lt;paths...&gt;</code></td><td>Stage files or directories.</td></tr>
+              <tr><td><code>lit commit -m "message"</code></td><td>Create a commit from the index.</td></tr>
+              <tr><td><code>lit status</code></td><td>Show staged, modified, deleted, and untracked files.</td></tr>
+              <tr><td><code>lit diff</code></td><td>Show the working tree diff against the current commit.</td></tr>
+              <tr><td><code>lit log</code></td><td>Show first-parent history from <code>HEAD</code>.</td></tr>
+              <tr><td><code>lit restore [paths...] --source &lt;rev&gt;</code></td><td>Restore tracked files without moving <code>HEAD</code>.</td></tr>
+              <tr><td><code>lit checkout &lt;branch-or-commit&gt;</code></td><td>Switch branches or detach <code>HEAD</code>.</td></tr>
+              <tr><td><code>lit branch [name]</code></td><td>List branches or create a new branch.</td></tr>
+              <tr><td><code>lit merge &lt;rev&gt;</code></td><td>Merge another local revision into the current branch.</td></tr>
+              <tr><td><code>lit merge --abort</code></td><td>Clear merge state and restore the pre-merge tree.</td></tr>
+              <tr><td><code>lit rebase &lt;rev&gt;</code></td><td>Rebase the current branch onto another local revision.</td></tr>
+              <tr><td><code>lit rebase --abort</code></td><td>Clear rebase state and restore the original branch tip.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <h2>Example workflow</h2>
+          <pre><code>lit init
+lit add src
+lit commit -m "Save working version"
+lit branch feature
+lit checkout feature
+lit add src
+lit commit -m "Work on feature"
+lit checkout main
+lit merge feature
+lit checkout feature
+lit rebase main
+lit restore docs --source HEAD</code></pre>
+        </article>
+
+        <article class="panel">
+          <h2>Git similarities and differences</h2>
+          <p>Similar to Git:</p>
+          <ul>
+            <li>Staging before commit</li>
+            <li>Local history and branches</li>
+            <li>Merge, rebase, checkout, and detached <code>HEAD</code></li>
+          </ul>
+          <p>Different from Git:</p>
+          <ul>
+            <li>No remote repositories</li>
+            <li>No `push`, `pull`, `fetch`, or `clone`</li>
+            <li>No collaboration or team workflow</li>
+            <li>Simpler merge and rebase behavior</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <h2>Local and offline constraints</h2>
+          <p>
+            `lit` is meant for one machine. Every workflow is local. Nothing in the
+            current product design depends on a network connection.
+          </p>
+          <ul>
+            <li>No server process</li>
+            <li>No cloud storage</li>
+            <li>No account system</li>
+            <li>No synchronization between computers</li>
+          </ul>
+        </article>
+
+        <article class="panel" id="limitations">
+          <h2>Limitations and non-goals</h2>
+          <ul>
+            <li>`lit diff` compares the working tree to the current commit only.</li>
+            <li>`lit log` follows first-parent history from <code>HEAD</code>.</li>
+            <li>Merge and rebase are real but simplified for ordinary local cases.</li>
+            <li>Conflicts are manual: `lit` writes conflict markers into files.</li>
+            <li>Checkout requires a clean index and tracked working tree.</li>
+            <li>Remote hosting, collaboration, cloud sync, and network workflows are non-goals.</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>Open locally</h2>
+        <p>
+          This site is static. Open <code>website/index.html</code> directly in a browser.
+          No build step, framework, or local server is required.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

@@ -652,6 +652,33 @@ def _run_lit(
     return result
 
 
+def test_readme_and_website_cover_verified_local_workflows() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
+    website = (ROOT / "website" / "index.html").read_text(encoding="utf-8").lower()
+    styles = (ROOT / "website" / "styles.css").read_text(encoding="utf-8")
+
+    for content in (readme, website):
+        assert "local-only" in content
+        assert "offline" in content
+        assert "python -m pip install -e ." in content
+        assert "quick start" in content
+        assert "lit init" in content
+        assert "lit add" in content
+        assert "lit commit -m" in content
+        assert "lit branch" in content
+        assert "lit merge" in content
+        assert "lit rebase" in content
+        assert "git" in content
+        assert "limitations" in content
+        assert "non-goals" in content
+        assert "push" in content
+        assert "pull" in content
+
+    assert "<!doctype html>" in website
+    assert "website/index.html" in readme
+    assert ":root" in styles
+
+
 def _commit_all(repo: Repository, message: str) -> str:
     repo.stage(["story.txt"])
     return repo.commit(message)

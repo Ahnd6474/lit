@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lit | local git</title>
+    <meta
+      name="description"
+      content="Beginner-friendly local documentation for lit, a lightweight local-only and offline-only Git-like version control prototype."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <p class="eyebrow">Local docs</p>
+        <h1>lit is local git for one computer.</h1>
+        <p class="lede">
+          lit is a lightweight, offline-only version control prototype. It keeps
+          repository data inside a local <code>.lit/</code> folder and does not
+          depend on accounts, remotes, cloud sync, or network access.
+        </p>
+        <div class="hero-actions">
+          <a href="#quick-start">Quick start</a>
+          <a href="#commands">Commands</a>
+          <a href="#limits">Limitations</a>
+        </div>
+      </header>
+
+      <main>
+        <section class="panel" id="what-is-lit">
+          <div class="section-head">
+            <p class="eyebrow">What it is</p>
+            <h2>A simple Git-like local checkpoint tool</h2>
+          </div>
+          <div class="two-column">
+            <div>
+              <p>
+                lit is designed for local history on a single machine. The goal
+                is a practical command-line workflow that feels familiar if you
+                know Git, but stays much narrower in scope.
+              </p>
+              <ul>
+                <li>Local-only repository format</li>
+                <li>Offline-only workflow</li>
+                <li>Deterministic <code>.lit/</code> storage layout</li>
+                <li>Minimal Python-based CLI prototype</li>
+              </ul>
+            </div>
+            <div class="callout">
+              <h3>Why use it?</h3>
+              <p>
+                Use lit when you want fast local checkpoints without setting up
+                a remote host, account, token, or sync service.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="local-only">
+          <div class="section-head">
+            <p class="eyebrow">Design boundary</p>
+            <h2>Local-only and offline-only by design</h2>
+          </div>
+          <div class="feature-grid">
+            <article>
+              <h3>No remote workflow</h3>
+              <p>No <code>push</code>, <code>pull</code>, <code>fetch</code>, or <code>clone</code>.</p>
+            </article>
+            <article>
+              <h3>No account system</h3>
+              <p>No login, identity, permissions, or hosted collaboration model.</p>
+            </article>
+            <article>
+              <h3>No cloud dependency</h3>
+              <p>Once installed, the tool is meant to work without network access.</p>
+            </article>
+            <article>
+              <h3>One machine focus</h3>
+              <p>The repository lives in one working folder on one computer.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel" id="setup">
+          <div class="section-head">
+            <p class="eyebrow">Setup</p>
+            <h2>Install and run lit locally</h2>
+          </div>
+          <p>lit currently targets Python <code>3.12+</code>.</p>
+          <div class="code-grid">
+            <article>
+              <h3>macOS / Linux</h3>
+              <pre><code>python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+lit init my-project</code></pre>
+            </article>
+            <article>
+              <h3>Windows PowerShell</h3>
+              <pre><code>python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e .
+lit init my-project</code></pre>
+            </article>
+          </div>
+          <p class="note">
+            You can also run <code>python -m lit init my-project</code> if you
+            prefer the module entry point.
+          </p>
+        </section>
+
+        <section class="panel" id="quick-start">
+          <div class="section-head">
+            <p class="eyebrow">Quick start</p>
+            <h2>What works today</h2>
+          </div>
+          <div class="two-column">
+            <div>
+              <pre><code>mkdir demo-project
+cd demo-project
+lit init</code></pre>
+              <p>
+                That command creates a local <code>.lit/</code> directory with
+                config, refs, object folders, and merge/rebase state files.
+              </p>
+            </div>
+            <div class="callout accent">
+              <h3>Current verified behavior</h3>
+              <p>
+                <code>lit init</code> works. The rest of the Git-like command
+                set is present as reserved CLI names but is not implemented yet.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="commands">
+          <div class="section-head">
+            <p class="eyebrow">Commands</p>
+            <h2>Main commands and prototype status</h2>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Command</th>
+                <th>Status</th>
+                <th>Meaning</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>lit init [path]</code></td>
+                <td>Working</td>
+                <td>Create a deterministic local repository layout.</td>
+              </tr>
+              <tr>
+                <td><code>lit add</code></td>
+                <td>Reserved</td>
+                <td>Planned staging command.</td>
+              </tr>
+              <tr>
+                <td><code>lit commit</code></td>
+                <td>Reserved</td>
+                <td>Planned checkpoint creation command.</td>
+              </tr>
+              <tr>
+                <td><code>lit log</code></td>
+                <td>Reserved</td>
+                <td>Planned history viewer.</td>
+              </tr>
+              <tr>
+                <td><code>lit status</code></td>
+                <td>Reserved</td>
+                <td>Planned working tree summary.</td>
+              </tr>
+              <tr>
+                <td><code>lit diff</code></td>
+                <td>Reserved</td>
+                <td>Planned local comparison command.</td>
+              </tr>
+              <tr>
+                <td><code>lit restore</code></td>
+                <td>Reserved</td>
+                <td>Planned file restore command.</td>
+              </tr>
+              <tr>
+                <td><code>lit checkout</code></td>
+                <td>Reserved</td>
+                <td>Planned branch or commit switch.</td>
+              </tr>
+              <tr>
+                <td><code>lit branch</code></td>
+                <td>Reserved</td>
+                <td>Planned branch management.</td>
+              </tr>
+              <tr>
+                <td><code>lit merge</code></td>
+                <td>Reserved</td>
+                <td>Planned local merge command.</td>
+              </tr>
+              <tr>
+                <td><code>lit rebase</code></td>
+                <td>Reserved</td>
+                <td>Planned local rebase command.</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="note">
+            Today, reserved commands print a not-implemented message and exit
+            with code <code>2</code>.
+          </p>
+        </section>
+
+        <section class="panel" id="workflow">
+          <div class="section-head">
+            <p class="eyebrow">Workflow</p>
+            <h2>Beginner-friendly roadmap example</h2>
+          </div>
+          <p>
+            This is the intended Git-like local workflow once the reserved
+            commands are implemented:
+          </p>
+          <ol class="steps">
+            <li><code>lit init</code> to create the repository.</li>
+            <li><code>lit add</code> to stage files.</li>
+            <li><code>lit commit</code> to save a checkpoint.</li>
+            <li><code>lit branch</code> to create a side branch.</li>
+            <li><code>lit checkout</code> to switch branches.</li>
+            <li><code>lit merge</code> to combine local work.</li>
+            <li><code>lit rebase</code> to replay local work on another branch.</li>
+            <li><code>lit restore</code> to discard a local file change.</li>
+          </ol>
+          <pre><code>lit init
+lit add journal.txt
+lit commit -m "Create first note"
+lit branch experiment
+lit checkout experiment
+lit merge experiment
+lit rebase main
+lit restore journal.txt</code></pre>
+          <p class="note">
+            Read that example as a roadmap. In this revision, only
+            <code>lit init</code> is operational.
+          </p>
+        </section>
+
+        <section class="panel" id="git-comparison">
+          <div class="section-head">
+            <p class="eyebrow">Comparison</p>
+            <h2>How lit is similar to Git, and how it differs</h2>
+          </div>
+          <div class="comparison">
+            <article>
+              <h3>Similarities</h3>
+              <ul>
+                <li>CLI-first workflow</li>
+                <li>Repository metadata stored inside the project folder</li>
+                <li>Planned add, commit, branch, merge, rebase, and restore flow</li>
+                <li>Object and ref storage for local history</li>
+              </ul>
+            </article>
+            <article>
+              <h3>Differences</h3>
+              <ul>
+                <li>Strictly local-only and offline-only</li>
+                <li>No hosted remote features</li>
+                <li>No collaboration model</li>
+                <li>Simpler, smaller on-disk format and project scope</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel" id="layout">
+          <div class="section-head">
+            <p class="eyebrow">Storage</p>
+            <h2>Current repository layout</h2>
+          </div>
+          <pre><code>.lit/
+  HEAD
+  config.json
+  index.json
+  objects/
+    blobs/
+    commits/
+    trees/
+  refs/
+    heads/
+    tags/
+  state/
+    merge.json
+    rebase.json</code></pre>
+          <p>
+            The current bootstrap uses sorted JSON files, a branch ref in
+            <code>HEAD</code>, and SHA-256 object identifiers for stored bytes.
+          </p>
+        </section>
+
+        <section class="panel" id="limits">
+          <div class="section-head">
+            <p class="eyebrow">Honest status</p>
+            <h2>Current limitations and non-goals</h2>
+          </div>
+          <div class="comparison">
+            <article>
+              <h3>Limitations</h3>
+              <ul>
+                <li>Only <code>lit init</code> is implemented today.</li>
+                <li>No verified add, commit, log, status, diff, restore, branch, merge, or rebase behavior yet.</li>
+                <li>Workflow examples beyond init are roadmap examples, not current functionality.</li>
+              </ul>
+            </article>
+            <article>
+              <h3>Non-goals</h3>
+              <ul>
+                <li>Remote repositories</li>
+                <li>Cloud sync</li>
+                <li>Accounts and authentication</li>
+                <li>Multi-user collaboration features</li>
+                <li>Heavy background infrastructure</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel" id="open-site">
+          <div class="section-head">
+            <p class="eyebrow">Run locally</p>
+            <h2>How to open this website</h2>
+          </div>
+          <p>
+            This site is plain static HTML and CSS. Open
+            <code>website/index.html</code> directly in a browser, or run:
+          </p>
+          <pre><code>python -m http.server</code></pre>
+          <p class="note">Then open the local URL shown by Python.</p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

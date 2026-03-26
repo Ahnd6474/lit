@@ -7,7 +7,10 @@ from lit.repository import Repository
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    parser = subparsers.add_parser("restore", help="Restore files from a commit.")
+    parser = subparsers.add_parser(
+        "restore",
+        help="Restore tracked files from a revision without moving HEAD.",
+    )
     parser.add_argument(
         "paths",
         nargs="*",

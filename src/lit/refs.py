@@ -48,11 +48,18 @@ def parse_symbolic_ref(raw_value: str) -> str | None:
 
 
 def read_head(path: Path) -> str | None:
-    return parse_symbolic_ref(read_text(path))
+    value = read_text(path).strip()
+    if not value:
+        return None
+    symbolic = parse_symbolic_ref(value)
+    return value if symbolic is None else symbolic
 
 
-def write_head(path: Path, ref_name: str) -> None:
-    write_text(path, f"{SYMBOLIC_REF_PREFIX}{ref_name}\n")
+def write_head(path: Path, value: str, *, symbolic: bool = True) -> None:
+    if symbolic:
+        write_text(path, f"{SYMBOLIC_REF_PREFIX}{value}\n")
+        return
+    write_text(path, f"{value}\n")
 
 
 def read_ref(path: Path) -> str | None:

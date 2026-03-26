@@ -7,7 +7,7 @@ from lit.repository import Repository
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    parser = subparsers.add_parser("branch", help="List or create branch references.")
+    parser = subparsers.add_parser("branch", help="List local branches or create a new branch.")
     parser.add_argument("name", nargs="?", help="Branch name to create.")
     parser.add_argument(
         "--start-point",

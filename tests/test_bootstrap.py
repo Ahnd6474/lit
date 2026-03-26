@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
@@ -141,14 +143,83 @@ def test_repository_branch_dag_and_operation_primitives(tmp_path: Path) -> None:
     )
 
 
+def test_repository_checkout_switches_branches_and_detaches_head(tmp_path: Path) -> None:
+    repo = Repository.create(tmp_path)
+
+    nested = tmp_path / "docs" / "guide.txt"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("base\n", encoding="utf-8")
+    base_commit = _commit_path(repo, "docs")
+    repo.create_branch("feature", start_point=base_commit)
+
+    nested.write_text("main\n", encoding="utf-8")
+    (tmp_path / "docs" / "main-only.txt").write_text("present\n", encoding="utf-8")
+    main_commit = _commit_path(repo, "docs")
+
+    checkout = repo.checkout("feature")
+    assert checkout.branch_name == "feature"
+    assert repo.current_branch_name() == "feature"
+    assert repo.current_commit_id() == base_commit
+    assert repo.layout.head.read_text(encoding="utf-8") == "ref: refs/heads/feature\n"
+    assert nested.read_text(encoding="utf-8") == "base\n"
+    assert not (tmp_path / "docs" / "main-only.txt").exists()
+
+    (tmp_path / "docs" / "main-only.txt").write_text("scratch\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="overwrite untracked paths"):
+        repo.checkout("main")
+    (tmp_path / "docs" / "main-only.txt").unlink()
+
+    detached = repo.checkout(main_commit)
+    assert detached.detached is True
+    assert repo.current_branch_name() is None
+    assert repo.current_commit_id() == main_commit
+    assert repo.layout.head.read_text(encoding="utf-8") == f"{main_commit}\n"
+    assert nested.read_text(encoding="utf-8") == "main\n"
+    assert (tmp_path / "docs" / "main-only.txt").read_text(encoding="utf-8") == "present\n"
+
+    nested.write_text("dirty\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="clean index and tracked working tree"):
+        repo.checkout("feature")
+    nested.write_text("main\n", encoding="utf-8")
+
+    switched_back = repo.checkout("main")
+    assert switched_back.branch_name == "main"
+    assert repo.current_branch_name() == "main"
+    assert repo.current_commit_id() == main_commit
+    assert repo.layout.head.read_text(encoding="utf-8") == "ref: refs/heads/main\n"
+
+
+def test_restore_restores_nested_paths_and_clears_selected_index_entries(tmp_path: Path) -> None:
+    repo = Repository.create(tmp_path)
+
+    nested = tmp_path / "docs" / "guide.txt"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("saved\n", encoding="utf-8")
+    (tmp_path / "notes.txt").write_text("baseline\n", encoding="utf-8")
+    base_commit = _commit_path(repo, ".")
+
+    nested.write_text("edited\n", encoding="utf-8")
+    (tmp_path / "notes.txt").write_text("changed\n", encoding="utf-8")
+    repo.stage(["docs", "notes.txt"])
+
+    restored = repo.restore(["docs"], source=base_commit)
+
+    assert restored == ("docs/guide.txt",)
+    assert nested.read_text(encoding="utf-8") == "saved\n"
+    assert (tmp_path / "notes.txt").read_text(encoding="utf-8") == "changed\n"
+    assert [entry.path for entry in repo.read_index().entries] == ["notes.txt"]
+
+
 def test_cli_builds_real_command_modules() -> None:
     parser = build_parser()
 
     branch_args = parser.parse_args(["branch"])
+    checkout_args = parser.parse_args(["checkout", "main"])
     merge_args = parser.parse_args(["merge"])
     rebase_args = parser.parse_args(["rebase"])
 
     assert branch_args.handler.__module__ == "lit.commands.branch"
+    assert checkout_args.handler.__module__ == "lit.commands.checkout"
     assert merge_args.handler.__module__ == "lit.commands.merge"
     assert rebase_args.handler.__module__ == "lit.commands.rebase"
 
@@ -182,6 +253,51 @@ def test_module_cli_init_and_branch_are_runnable(tmp_path: Path) -> None:
     assert branch_result.stdout.strip() == "* main unborn"
 
 
+def test_module_cli_checkout_switches_branch_and_detaches(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo = Repository.create(repo_root)
+
+    (repo_root / "story.txt").write_text("base\n", encoding="utf-8")
+    base_commit = _commit_all(repo, "base")
+    repo.create_branch("feature", start_point=base_commit)
+
+    (repo_root / "story.txt").write_text("main\n", encoding="utf-8")
+    main_commit = _commit_all(repo, "main")
+
+    branch_result = subprocess.run(
+        [sys.executable, "-m", "lit", "checkout", "feature"],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert branch_result.returncode == 0
+    assert branch_result.stdout.strip() == "switched to branch feature"
+    assert repo.layout.head.read_text(encoding="utf-8") == "ref: refs/heads/feature\n"
+    assert (repo_root / "story.txt").read_text(encoding="utf-8") == "base\n"
+
+    detached_result = subprocess.run(
+        [sys.executable, "-m", "lit", "checkout", main_commit],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert detached_result.returncode == 0
+    assert detached_result.stdout.strip() == f"detached HEAD at {main_commit[:12]}"
+    assert repo.layout.head.read_text(encoding="utf-8") == f"{main_commit}\n"
+    assert (repo_root / "story.txt").read_text(encoding="utf-8") == "main\n"
+
+
 def _commit_all(repo: Repository, message: str) -> str:
     repo.stage(["story.txt"])
+    return repo.commit(message)
+
+
+def _commit_path(repo: Repository, path: str, message: str = "commit") -> str:
+    repo.stage([path])
     return repo.commit(message)

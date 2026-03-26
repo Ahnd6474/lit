@@ -92,6 +92,18 @@ class BranchRecord:
 
 
 @dataclass(frozen=True)
+class CheckoutRecord:
+    revision: str
+    commit_id: str | None
+    branch_name: str | None
+    restored_paths: tuple[str, ...]
+
+    @property
+    def detached(self) -> bool:
+        return self.branch_name is None
+
+
+@dataclass(frozen=True)
 class RepositoryConfig:
     schema_version: int = 1
     default_branch: str = "main"
@@ -247,13 +259,22 @@ class Repository:
         raise FileNotFoundError(f"lit repository not found from {current}")
 
     def current_head_ref(self) -> str | None:
-        return read_head(self.layout.head)
+        head = read_head(self.layout.head)
+        if branch_name_from_ref(head) is None:
+            return None
+        return head
 
     def set_head_ref(self, ref_name: str) -> None:
         write_head(self.layout.head, ref_name)
 
+    def set_head_commit(self, commit_id: str) -> None:
+        write_head(self.layout.head, commit_id, symbolic=False)
+
+    def current_head_target(self) -> str | None:
+        return read_head(self.layout.head)
+
     def current_branch_name(self) -> str | None:
-        return branch_name_from_ref(self.current_head_ref())
+        return branch_name_from_ref(self.current_head_target())
 
     def read_branch(self, branch_name: str) -> str | None:
         return read_ref(self.layout.branch_path(branch_name))
@@ -408,16 +429,29 @@ class Repository:
         return self.layout.object_path(kind, object_id).read_bytes()
 
     def current_commit_id(self) -> str | None:
-        branch_name = self.current_branch_name()
-        if branch_name is None:
+        head_target = self.current_head_target()
+        branch_name = branch_name_from_ref(head_target)
+        if branch_name is not None:
+            return self.read_branch(branch_name)
+        if head_target is not None and self.layout.object_path("commits", head_target).exists():
+            return head_target
+        return None
+
+    def resolve_branch_name(self, revision: str) -> str | None:
+        try:
+            normalized = normalize_branch_name(revision)
+        except ValueError:
             return None
-        return self.read_branch(branch_name)
+        if self.layout.branch_path(normalized).exists():
+            return normalized
+        return None
 
     def resolve_revision(self, revision: str | None = None) -> str | None:
         if revision in (None, "HEAD"):
             return self.current_commit_id()
-        branch_commit = self.read_branch(revision)
-        if branch_commit is not None or self.layout.branch_path(revision).exists():
+        branch_name = self.resolve_branch_name(revision)
+        if branch_name is not None:
+            branch_commit = self.read_branch(branch_name)
             return branch_commit
         if self.layout.object_path("commits", revision).exists():
             return revision
@@ -756,6 +790,29 @@ class Repository:
             clear_index=True,
         )
 
+    def checkout(self, revision: str) -> CheckoutRecord:
+        operation = self.current_operation()
+        if operation is not None:
+            raise RuntimeError(f"cannot checkout while a {operation.kind} is in progress")
+
+        target_branch = self.resolve_branch_name(revision)
+        target_commit = self.resolve_revision(revision)
+        current_commit = self.current_commit_id()
+        self._ensure_checkout_safe(target_commit, baseline_commit=current_commit)
+        restored_paths = self.apply_commit(target_commit, baseline_commit=current_commit)
+        if target_branch is not None:
+            self.set_head_ref(branch_ref(target_branch))
+        elif target_commit is not None:
+            self.set_head_commit(target_commit)
+        else:
+            raise RuntimeError(f"cannot detach HEAD at unresolved revision: {revision}")
+        return CheckoutRecord(
+            revision=revision,
+            commit_id=target_commit,
+            branch_name=target_branch,
+            restored_paths=restored_paths,
+        )
+
     def _populate_tree(
         self,
         tree_id: str,
@@ -836,6 +893,36 @@ class Repository:
         else:
             remaining_entries = ()
         self.write_index(IndexState(entries=remaining_entries))
+
+    def _ensure_checkout_safe(
+        self,
+        target_commit: str | None,
+        *,
+        baseline_commit: str | None,
+    ) -> None:
+        status = self.status()
+        if any(
+            (
+                status.staged_added,
+                status.staged_modified,
+                status.staged_deleted,
+                status.modified,
+                status.deleted,
+            )
+        ):
+            raise RuntimeError("checkout requires a clean index and tracked working tree")
+
+        target_files = self.read_commit_tree(target_commit)
+        baseline_files = self.read_commit_tree(baseline_commit)
+        clobbered = sorted(
+            path
+            for path in status.untracked
+            if path in target_files and path not in baseline_files
+        )
+        if clobbered:
+            listed = ", ".join(clobbered[:3])
+            suffix = "" if len(clobbered) <= 3 else ", ..."
+            raise RuntimeError(f"checkout would overwrite untracked paths: {listed}{suffix}")
 
     def _write_working_file(self, path: str, tracked: TrackedFile) -> None:
         target = self.root / path

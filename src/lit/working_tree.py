@@ -52,3 +52,16 @@ def snapshot_file(repository_root: Path, file_path: Path) -> FileSnapshot:
 
 def sort_snapshots(entries: Iterable[FileSnapshot]) -> tuple[FileSnapshot, ...]:
     return tuple(sorted(entries, key=lambda entry: entry.path))
+
+
+def scan_working_tree(repository_root: Path) -> tuple[FileSnapshot, ...]:
+    snapshots: list[FileSnapshot] = []
+    for candidate in sorted(repository_root.rglob("*")):
+        if not candidate.is_file():
+            continue
+        if candidate == repository_root / ".lit":
+            continue
+        if (repository_root / ".lit") in candidate.parents:
+            continue
+        snapshots.append(snapshot_file(repository_root, candidate))
+    return sort_snapshots(snapshots)

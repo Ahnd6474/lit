@@ -2,19 +2,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from lit.storage import read_json, write_json
+
+IndexEntryKind = Literal["blob", "delete"]
 
 
 @dataclass(frozen=True)
 class IndexEntry:
     path: str
-    digest: str
-    size: int
+    digest: str | None
+    size: int = 0
     executable: bool = False
+    kind: IndexEntryKind = "blob"
+
+    @classmethod
+    def deletion(cls, path: str) -> "IndexEntry":
+        return cls(path=path, digest=None, kind="delete")
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "kind": self.kind,
             "digest": self.digest,
             "executable": self.executable,
             "path": self.path,
@@ -25,9 +34,10 @@ class IndexEntry:
     def from_dict(cls, data: dict[str, object]) -> "IndexEntry":
         return cls(
             path=str(data["path"]),
-            digest=str(data["digest"]),
+            digest=None if data.get("digest") is None else str(data["digest"]),
             size=int(data["size"]),
             executable=bool(data.get("executable", False)),
+            kind=str(data.get("kind", "blob")),
         )
 
 

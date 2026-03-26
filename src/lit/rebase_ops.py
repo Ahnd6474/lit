@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from lit.commits import CommitRecord, serialize_commit
+from lit.index import IndexState
 from lit.merge_ops import MergePlan, _current_branch, _ensure_operation_ready, _merge_trees
 from lit.repository import Repository
 
@@ -109,5 +110,5 @@ def _rewrite_commit(
     rewritten = CommitRecord(tree=tree_id, parents=(parent,), message=record.message)
     commit_id = repository.store_object("commits", serialize_commit(rewritten))
     repository.write_branch(_current_branch(repository), commit_id)
-    repository.write_index(repository.read_index().__class__())
+    repository.write_index(IndexState())
     return commit_id

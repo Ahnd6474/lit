@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Mapping
 
 from lit.commits import CommitRecord, serialize_commit
+from lit.index import IndexState
 from lit.refs import branch_ref
 from lit.repository import Repository, TrackedFile
 
@@ -109,7 +110,7 @@ def _merge_trees(
         base_file = base_tree.get(path)
         current_file = current_tree.get(path)
         target_file = target_tree.get(path)
-        resolved = _resolve_path(base_file, current_file, target_file)
+        resolved = _resolve_path(repository, base_file, current_file, target_file)
         if isinstance(resolved, ConflictFile):
             conflicts.append(resolved)
             continue
@@ -119,6 +120,7 @@ def _merge_trees(
 
 
 def _resolve_path(
+    repository: Repository,
     base_file: TrackedFile | None,
     current_file: TrackedFile | None,
     target_file: TrackedFile | None,
@@ -135,7 +137,7 @@ def _resolve_path(
         return None
     return ConflictFile(
         path=path.path,
-        content=_render_conflict(base_file, current_file, target_file),
+        content=_render_conflict(repository, base_file, current_file, target_file),
     )
 
 
@@ -150,13 +152,14 @@ def _same_file(left: TrackedFile | None, right: TrackedFile | None) -> bool:
 
 
 def _render_conflict(
+    repository: Repository,
     base_file: TrackedFile | None,
     current_file: TrackedFile | None,
     target_file: TrackedFile | None,
 ) -> str:
-    ours = _decode_file(current_file)
-    base = _decode_file(base_file)
-    theirs = _decode_file(target_file)
+    ours = _decode_file(repository, current_file)
+    base = _decode_file(repository, base_file)
+    theirs = _decode_file(repository, target_file)
     return (
         "<<<<<<< current\n"
         f"{ours}"
@@ -168,10 +171,9 @@ def _render_conflict(
     )
 
 
-def _decode_file(file: TrackedFile | None) -> str:
+def _decode_file(repository: Repository, file: TrackedFile | None) -> str:
     if file is None:
         return ""
-    repository = _decode_file.repository
     return repository.read_object("blobs", file.digest).decode("utf-8", errors="replace")
 
 
@@ -193,7 +195,7 @@ def _write_commit(
     record = CommitRecord(tree=tree_id, parents=parents, message=message)
     commit_id = repository.store_object("commits", serialize_commit(record))
     repository.write_branch(_current_branch(repository), commit_id)
-    repository.write_index(repository.read_index().__class__())
+    repository.write_index(IndexState())
     return commit_id
 
 
@@ -219,7 +221,3 @@ def _ensure_operation_ready(repository: Repository) -> None:
         raise ValueError("another operation is already in progress")
     if not repository.status().is_clean():
         raise ValueError("working tree must be clean before merge")
-    _decode_file.repository = repository
-
-
-_decode_file.repository = None  # type: ignore[attr-defined]

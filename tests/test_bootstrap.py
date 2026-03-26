@@ -422,6 +422,236 @@ def test_module_cli_checkout_switches_branch_and_detaches(tmp_path: Path) -> Non
     assert (repo_root / "story.txt").read_text(encoding="utf-8") == "main\n"
 
 
+def test_cli_core_workflow_covers_status_diff_log_restore_and_nested_paths(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+
+    init_result = _run_lit(tmp_path, "init", "repo")
+    assert init_result.stdout.strip() == f"Initialized empty lit repository in {repo_root / '.lit'}"
+
+    nested = repo_root / "docs" / "guide.txt"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("hello\n", encoding="utf-8")
+    tracked = repo_root / "notes.txt"
+    tracked.write_text("start\n", encoding="utf-8")
+
+    add_result = _run_lit(repo_root, "add", "docs", "notes.txt")
+    assert add_result.stdout.strip() == "staged 2 path(s)"
+
+    commit_result = _run_lit(repo_root, "commit", "-m", "initial snapshot")
+    repo = Repository.open(repo_root)
+    first_commit = repo.current_commit_id()
+    assert first_commit is not None
+    assert commit_result.stdout.strip() == f"[main {first_commit[:12]}] initial snapshot"
+    assert repo.read_commit(first_commit).metadata.author == "lit"
+
+    nested.write_text("hello again\n", encoding="utf-8")
+    tracked.unlink()
+    untracked = repo_root / "scratch.txt"
+    untracked.write_text("extra\n", encoding="utf-8")
+
+    status_result = _run_lit(repo_root, "status")
+    assert "Changes not staged for commit:" in status_result.stdout
+    assert "  modified: docs/guide.txt" in status_result.stdout
+    assert "  deleted: notes.txt" in status_result.stdout
+    assert "Untracked files:" in status_result.stdout
+    assert "  scratch.txt" in status_result.stdout
+
+    diff_result = _run_lit(repo_root, "diff")
+    assert "--- a/docs/guide.txt" in diff_result.stdout
+    assert "+++ b/docs/guide.txt" in diff_result.stdout
+    assert "-hello" in diff_result.stdout
+    assert "+hello again" in diff_result.stdout
+    assert "--- a/notes.txt" in diff_result.stdout
+    assert "+++ b/notes.txt" in diff_result.stdout
+
+    staged_result = _run_lit(repo_root, "add", "docs", "notes.txt")
+    assert staged_result.stdout.strip() == "staged 2 path(s)"
+
+    staged_status = _run_lit(repo_root, "status")
+    assert "Changes to be committed:" in staged_status.stdout
+    assert "  modified: docs/guide.txt" in staged_status.stdout
+    assert "  deleted: notes.txt" in staged_status.stdout
+    assert "  scratch.txt" in staged_status.stdout
+
+    second_commit_result = _run_lit(repo_root, "commit", "-m", "update tracked files")
+    repo = Repository.open(repo_root)
+    second_commit = repo.current_commit_id()
+    assert second_commit is not None and second_commit != first_commit
+    assert second_commit_result.stdout.strip() == f"[main {second_commit[:12]}] update tracked files"
+
+    log_result = _run_lit(repo_root, "log")
+    log_lines = [line for line in log_result.stdout.splitlines() if line]
+    assert log_lines[:4] == [
+        f"commit {second_commit}",
+        "    update tracked files",
+        f"commit {first_commit}",
+        "    initial snapshot",
+    ]
+
+    nested.write_text("broken\n", encoding="utf-8")
+    restore_result = _run_lit(repo_root, "restore", "--source", "HEAD", "docs")
+    assert restore_result.stdout.strip() == "restored 1 path(s) from HEAD"
+    assert nested.read_text(encoding="utf-8") == "hello again\n"
+
+
+def test_cli_branch_checkout_and_merge_workflows(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _run_lit(tmp_path, "init", "repo")
+
+    story = repo_root / "story.txt"
+    story.write_text("base\n", encoding="utf-8")
+    _run_lit(repo_root, "add", "story.txt")
+    _run_lit(repo_root, "commit", "-m", "base")
+
+    base_repo = Repository.open(repo_root)
+    base_commit = base_repo.current_commit_id()
+    assert base_commit is not None
+
+    branch_create = _run_lit(repo_root, "branch", "feature")
+    assert branch_create.stdout.strip() == f"feature -> {base_commit[:12]}"
+
+    branch_list = _run_lit(repo_root, "branch")
+    assert branch_list.stdout.splitlines() == [f"  feature {base_commit[:12]}", f"* main {base_commit[:12]}"]
+
+    checkout_feature = _run_lit(repo_root, "checkout", "feature")
+    assert checkout_feature.stdout.strip() == "switched to branch feature"
+
+    story.write_text("feature branch\n", encoding="utf-8")
+    feature_only = repo_root / "feature.txt"
+    feature_only.write_text("feature side\n", encoding="utf-8")
+    _run_lit(repo_root, "add", "story.txt", "feature.txt")
+    _run_lit(repo_root, "commit", "-m", "feature work")
+
+    feature_repo = Repository.open(repo_root)
+    feature_commit = feature_repo.current_commit_id()
+    assert feature_commit is not None and feature_commit != base_commit
+
+    detached = _run_lit(repo_root, "checkout", base_commit)
+    assert detached.stdout.strip() == f"detached HEAD at {base_commit[:12]}"
+    assert story.read_text(encoding="utf-8") == "base\n"
+    assert not feature_only.exists()
+
+    back_to_main = _run_lit(repo_root, "checkout", "main")
+    assert back_to_main.stdout.strip() == "switched to branch main"
+    assert story.read_text(encoding="utf-8") == "base\n"
+
+    main_only = repo_root / "main.txt"
+    main_only.write_text("main side\n", encoding="utf-8")
+    _run_lit(repo_root, "add", "main.txt")
+    _run_lit(repo_root, "commit", "-m", "main work")
+
+    merge_result = _run_lit(repo_root, "merge", "feature")
+    assert "Merge commit created:" in merge_result.stdout
+    assert story.read_text(encoding="utf-8") == "feature branch\n"
+    assert feature_only.read_text(encoding="utf-8") == "feature side\n"
+    assert main_only.read_text(encoding="utf-8") == "main side\n"
+
+    merged_repo = Repository.open(repo_root)
+    merge_commit = merged_repo.current_commit_id()
+    assert merge_commit is not None
+    assert merged_repo.read_commit(merge_commit).parents[1] == feature_commit
+
+
+def test_cli_rebase_replays_branch_commits(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _run_lit(tmp_path, "init", "repo")
+
+    shared = repo_root / "shared.txt"
+    shared.write_text("base\n", encoding="utf-8")
+    _run_lit(repo_root, "add", "shared.txt")
+    _run_lit(repo_root, "commit", "-m", "base")
+
+    repo = Repository.open(repo_root)
+    base_commit = repo.current_commit_id()
+    assert base_commit is not None
+
+    _run_lit(repo_root, "branch", "feature")
+
+    main_file = repo_root / "main.txt"
+    main_file.write_text("main\n", encoding="utf-8")
+    _run_lit(repo_root, "add", "main.txt")
+    _run_lit(repo_root, "commit", "-m", "main work")
+
+    repo = Repository.open(repo_root)
+    main_commit = repo.current_commit_id()
+    assert main_commit is not None and main_commit != base_commit
+
+    _run_lit(repo_root, "checkout", "feature")
+    feature_file = repo_root / "feature.txt"
+    feature_file.write_text("feature\n", encoding="utf-8")
+    _run_lit(repo_root, "add", "feature.txt")
+    _run_lit(repo_root, "commit", "-m", "feature work")
+
+    feature_repo = Repository.open(repo_root)
+    original_feature_commit = feature_repo.current_commit_id()
+    assert original_feature_commit is not None
+
+    rebase_result = _run_lit(repo_root, "rebase", "main")
+    assert "Rebased onto main at" in rebase_result.stdout
+
+    rebased_repo = Repository.open(repo_root)
+    rebased_commit = rebased_repo.current_commit_id()
+    assert rebased_commit is not None and rebased_commit != original_feature_commit
+    assert rebased_repo.read_commit(rebased_commit).parents == (main_commit,)
+    assert main_file.read_text(encoding="utf-8") == "main\n"
+    assert feature_file.read_text(encoding="utf-8") == "feature\n"
+
+
+def test_cli_merge_conflict_reports_state_and_supports_abort(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _run_lit(tmp_path, "init", "repo")
+
+    story = repo_root / "story.txt"
+    story.write_text("base\n", encoding="utf-8")
+    _run_lit(repo_root, "add", "story.txt")
+    _run_lit(repo_root, "commit", "-m", "base")
+    _run_lit(repo_root, "branch", "feature")
+
+    story.write_text("main change\n", encoding="utf-8")
+    _run_lit(repo_root, "add", "story.txt")
+    _run_lit(repo_root, "commit", "-m", "main change")
+
+    _run_lit(repo_root, "checkout", "feature")
+    story.write_text("feature change\n", encoding="utf-8")
+    _run_lit(repo_root, "add", "story.txt")
+    _run_lit(repo_root, "commit", "-m", "feature change")
+    _run_lit(repo_root, "checkout", "main")
+
+    merge_result = _run_lit(repo_root, "merge", "feature", expected_returncode=1)
+    assert "Merge stopped with conflicts." in merge_result.stdout
+    assert "conflicts:" in merge_result.stdout
+    assert "  story.txt" in merge_result.stdout
+    conflict_text = story.read_text(encoding="utf-8")
+    assert "<<<<<<< current" in conflict_text
+    assert "main change" in conflict_text
+    assert "feature change" in conflict_text
+
+    merge_state = _run_lit(repo_root, "merge")
+    assert "merge in progress:" in merge_state.stdout
+    assert "conflicts:" in merge_state.stdout
+
+    abort_result = _run_lit(repo_root, "merge", "--abort")
+    assert abort_result.stdout.strip() == "Merge state cleared."
+    assert story.read_text(encoding="utf-8") == "main change\n"
+
+
+def _run_lit(
+    cwd: Path,
+    *args: str,
+    expected_returncode: int = 0,
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        [sys.executable, "-m", "lit", *args],
+        cwd=cwd,
+        env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == expected_returncode, result.stdout + result.stderr
+    return result
+
+
 def _commit_all(repo: Repository, message: str) -> str:
     repo.stage(["story.txt"])
     return repo.commit(message)

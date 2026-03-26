@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lit docs</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <p class="eyebrow">lit documentation</p>
+      <h1>Local history, no network required.</h1>
+      <p class="lede">
+        lit is a local-only, offline-only version control prototype. It borrows the
+        basic shape of Git for one-computer workflows, without remotes, accounts,
+        servers, or cloud features.
+      </p>
+      <div class="callout">
+        <strong>Open this file directly in your browser.</strong>
+        <span>You can also serve the <code>website/</code> folder with a tiny local static server.</span>
+      </div>
+    </header>
+
+    <main>
+      <nav class="toc" aria-label="Contents">
+        <a href="#what">What is lit?</a>
+        <a href="#setup">Install and setup</a>
+        <a href="#commands">Command overview</a>
+        <a href="#workflow">Planned command workflow</a>
+        <a href="#git">Git: same ideas, smaller scope</a>
+        <a href="#limits">Limitations and non-goals</a>
+      </nav>
+
+      <section id="what" class="panel">
+        <h2>What is lit?</h2>
+        <p>
+          lit means "local git". The goal is simple: keep local checkpoints on one
+          machine with a workflow that feels familiar to Git users while staying much
+          smaller in scope.
+        </p>
+        <ul>
+          <li>local-only</li>
+          <li>offline-only</li>
+          <li>single-computer workflow</li>
+          <li>deterministic on-disk storage</li>
+        </ul>
+      </section>
+
+      <section id="setup" class="panel">
+        <h2>Install and setup</h2>
+        <p>lit currently targets Python 3.12 or newer.</p>
+        <pre><code>git clone https://github.com/Ahnd6474/lit.git
+cd lit
+python -m venv .venv
+pip install -e .
+python -m lit init</code></pre>
+        <p>
+          If you prefer a local static server for these docs, run
+          <code>python -m http.server</code> inside <code>website/</code> and open the
+          local address it prints.
+        </p>
+      </section>
+
+      <section id="commands" class="panel">
+        <h2>Command overview</h2>
+        <p>Only <code>lit init</code> works today.</p>
+        <p>Only `lit init` works today.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Command</th>
+              <th>Status</th>
+              <th>Current behavior</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>lit init</code></td>
+              <td>Implemented</td>
+              <td>Creates a deterministic <code>.lit/</code> layout.</td>
+            </tr>
+            <tr>
+              <td><code>lit add</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit commit</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit log</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit status</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit diff</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit restore</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit checkout</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit branch</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit merge</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit rebase</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="workflow" class="panel">
+        <h2>Planned command workflow</h2>
+        <p>
+          This is the beginner-friendly path lit is being built toward. In this revision,
+          it is a roadmap, not a fully working demo.
+        </p>
+        <pre><code>lit init
+lit add notes.txt
+lit commit -m "save first draft"
+lit branch experiment
+lit checkout experiment
+lit merge experiment
+lit rebase main
+lit restore notes.txt</code></pre>
+        <p>
+          Today, only the first line is executable. The rest describe the intended
+          Git-like workflow for future milestones.
+        </p>
+      </section>
+
+      <section id="git" class="panel">
+        <h2>Git: same ideas, smaller scope</h2>
+        <div class="split">
+          <div>
+            <h3>Similar</h3>
+            <ul>
+              <li>repository per folder</li>
+              <li>hidden metadata directory</li>
+              <li>planned staging, commit, branch, merge, and rebase flow</li>
+              <li>content-addressed objects</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Different</h3>
+            <ul>
+              <li>no push, pull, fetch, clone, or remotes</li>
+              <li>no accounts or hosted service</li>
+              <li>no collaboration model</li>
+              <li>designed to stay local-only and offline-only</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="limits" class="panel">
+        <h2>Limitations and non-goals</h2>
+        <ul>
+          <li>The repository is still in the bootstrap stage.</li>
+          <li>Staging, commit history, diff, restore, branch switching, merge, and rebase are not implemented yet.</li>
+          <li>Remote workflows are not planned.</li>
+          <li>Cloud sync, accounts, and network-dependent features are out of scope.</li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

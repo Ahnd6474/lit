@@ -12,7 +12,9 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from lit.cli import build_parser
 from lit.commits import CommitMetadata, CommitRecord, commit_id, deserialize_commit, serialize_commit
+from lit.merge_ops import merge_revision
 from lit.refs import branch_ref
+from lit.rebase_ops import rebase_onto
 from lit.repository import Repository
 
 
@@ -215,13 +217,140 @@ def test_cli_builds_real_command_modules() -> None:
 
     branch_args = parser.parse_args(["branch"])
     checkout_args = parser.parse_args(["checkout", "main"])
-    merge_args = parser.parse_args(["merge"])
-    rebase_args = parser.parse_args(["rebase"])
+    merge_args = parser.parse_args(["merge", "feature"])
+    rebase_args = parser.parse_args(["rebase", "main"])
 
     assert branch_args.handler.__module__ == "lit.commands.branch"
     assert checkout_args.handler.__module__ == "lit.commands.checkout"
     assert merge_args.handler.__module__ == "lit.commands.merge"
     assert rebase_args.handler.__module__ == "lit.commands.rebase"
+
+
+def test_merge_revision_creates_real_merge_commit(tmp_path: Path) -> None:
+    repo = Repository.create(tmp_path)
+
+    (tmp_path / "story.txt").write_text("base\n", encoding="utf-8")
+    base_commit = _commit_all(repo, "base")
+
+    repo.create_branch("feature", start_point=base_commit)
+
+    (tmp_path / "story.txt").write_text("main\n", encoding="utf-8")
+    main_commit = _commit_all(repo, "main")
+
+    repo.set_head_ref(branch_ref("feature"))
+    repo.apply_commit(base_commit, baseline_commit=main_commit)
+    (tmp_path / "side.txt").write_text("feature\n", encoding="utf-8")
+    repo.stage(["side.txt"])
+    feature_commit = repo.commit("feature")
+
+    repo.set_head_ref(branch_ref("main"))
+    repo.apply_commit(main_commit, baseline_commit=feature_commit)
+
+    result = merge_revision(repo, "feature")
+
+    assert result.status == "merged"
+    merge_commit = repo.current_commit_id()
+    assert merge_commit is not None
+    record = repo.read_commit(merge_commit)
+    assert record.parents == (main_commit, feature_commit)
+    assert (tmp_path / "story.txt").read_text(encoding="utf-8") == "main\n"
+    assert (tmp_path / "side.txt").read_text(encoding="utf-8") == "feature\n"
+    assert repo.read_merge_state() is None
+
+
+def test_merge_revision_persists_conflict_state_and_markers(tmp_path: Path) -> None:
+    repo = Repository.create(tmp_path)
+
+    (tmp_path / "story.txt").write_text("base\n", encoding="utf-8")
+    base_commit = _commit_all(repo, "base")
+    repo.create_branch("feature", start_point=base_commit)
+
+    (tmp_path / "story.txt").write_text("main change\n", encoding="utf-8")
+    main_commit = _commit_all(repo, "main")
+
+    repo.set_head_ref(branch_ref("feature"))
+    repo.apply_commit(base_commit, baseline_commit=main_commit)
+    (tmp_path / "story.txt").write_text("feature change\n", encoding="utf-8")
+    feature_commit = _commit_all(repo, "feature")
+
+    repo.set_head_ref(branch_ref("main"))
+    repo.apply_commit(main_commit, baseline_commit=feature_commit)
+
+    result = merge_revision(repo, "feature")
+
+    assert result.status == "conflict"
+    assert result.conflicts == ("story.txt",)
+    conflict_text = (tmp_path / "story.txt").read_text(encoding="utf-8")
+    assert "<<<<<<< current" in conflict_text
+    assert "main change" in conflict_text
+    assert "feature change" in conflict_text
+    state = repo.read_merge_state()
+    assert state is not None
+    assert state.base_commit == base_commit
+    assert state.current_commit == main_commit
+    assert state.target_commit == feature_commit
+    assert state.conflicts == ("story.txt",)
+
+
+def test_rebase_onto_rewrites_local_commits(tmp_path: Path) -> None:
+    repo = Repository.create(tmp_path)
+
+    (tmp_path / "story.txt").write_text("base\n", encoding="utf-8")
+    base_commit = _commit_all(repo, "base")
+    repo.create_branch("feature", start_point=base_commit)
+
+    (tmp_path / "main.txt").write_text("main\n", encoding="utf-8")
+    repo.stage(["main.txt"])
+    main_commit = repo.commit("main")
+
+    repo.set_head_ref(branch_ref("feature"))
+    repo.apply_commit(base_commit, baseline_commit=main_commit)
+    (tmp_path / "feature.txt").write_text("feature\n", encoding="utf-8")
+    repo.stage(["feature.txt"])
+    original_feature = repo.commit("feature")
+
+    result = rebase_onto(repo, "main")
+
+    assert result.status == "rebased"
+    rebased_head = repo.current_commit_id()
+    assert rebased_head is not None
+    assert rebased_head != original_feature
+    assert repo.read_commit(rebased_head).parents == (main_commit,)
+    assert (tmp_path / "main.txt").read_text(encoding="utf-8") == "main\n"
+    assert (tmp_path / "feature.txt").read_text(encoding="utf-8") == "feature\n"
+    assert repo.read_rebase_state() is None
+
+
+def test_rebase_onto_persists_conflict_state_and_markers(tmp_path: Path) -> None:
+    repo = Repository.create(tmp_path)
+
+    (tmp_path / "story.txt").write_text("base\n", encoding="utf-8")
+    base_commit = _commit_all(repo, "base")
+    repo.create_branch("feature", start_point=base_commit)
+
+    (tmp_path / "story.txt").write_text("main change\n", encoding="utf-8")
+    main_commit = _commit_all(repo, "main")
+
+    repo.set_head_ref(branch_ref("feature"))
+    repo.apply_commit(base_commit, baseline_commit=main_commit)
+    (tmp_path / "story.txt").write_text("feature change\n", encoding="utf-8")
+    feature_commit = _commit_all(repo, "feature")
+
+    result = rebase_onto(repo, "main")
+
+    assert result.status == "conflict"
+    assert result.conflicts == ("story.txt",)
+    state = repo.read_rebase_state()
+    assert state is not None
+    assert state.original_head == feature_commit
+    assert state.onto == main_commit
+    assert state.current_commit == feature_commit
+    assert state.pending_commits == (feature_commit,)
+    assert state.conflicts == ("story.txt",)
+    conflict_text = (tmp_path / "story.txt").read_text(encoding="utf-8")
+    assert "<<<<<<< current" in conflict_text
+    assert "main change" in conflict_text
+    assert "feature change" in conflict_text
 
 
 def test_module_cli_init_and_branch_are_runnable(tmp_path: Path) -> None:

@@ -3,11 +3,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from lit.merge_ops import merge_revision
 from lit.repository import Repository
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    parser = subparsers.add_parser("merge", help="Inspect or manage merge state.")
+    parser = subparsers.add_parser("merge", help="Merge another local revision into the current branch.")
+    parser.add_argument("revision", nargs="?", help="Branch or commit to merge.")
     parser.add_argument(
         "--abort",
         action="store_true",
@@ -26,6 +28,20 @@ def run(args: argparse.Namespace) -> int:
         repository.apply_commit(state.current_commit, baseline_commit=repository.current_commit_id())
         repository.clear_merge()
         print("Merge state cleared.")
+        return 0
+
+    if args.revision:
+        try:
+            result = merge_revision(repository, args.revision)
+        except ValueError as error:
+            print(str(error))
+            return 1
+        print(result.message)
+        if result.conflicts:
+            print("conflicts:")
+            for path in result.conflicts:
+                print(f"  {path}")
+            return 1
         return 0
 
     if state is None:

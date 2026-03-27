@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from lit.storage import read_text, write_text
+from lit.storage import FileMutationWriter, delete_path, read_text, write_text
 
 SYMBOLIC_REF_PREFIX = "ref: "
 HEADS_PREFIX = "refs/heads/"
@@ -55,11 +55,17 @@ def read_head(path: Path) -> str | None:
     return value if symbolic is None else symbolic
 
 
-def write_head(path: Path, value: str, *, symbolic: bool = True) -> None:
+def write_head(
+    path: Path,
+    value: str,
+    *,
+    symbolic: bool = True,
+    mutation: FileMutationWriter | None = None,
+) -> None:
     if symbolic:
-        write_text(path, f"{SYMBOLIC_REF_PREFIX}{value}\n")
+        write_text(path, f"{SYMBOLIC_REF_PREFIX}{value}\n", mutation=mutation)
         return
-    write_text(path, f"{value}\n")
+    write_text(path, f"{value}\n", mutation=mutation)
 
 
 def read_ref(path: Path) -> str | None:
@@ -67,5 +73,14 @@ def read_ref(path: Path) -> str | None:
     return value or None
 
 
-def write_ref(path: Path, value: str | None) -> None:
-    write_text(path, "" if value is None else f"{value}\n")
+def write_ref(
+    path: Path,
+    value: str | None,
+    *,
+    mutation: FileMutationWriter | None = None,
+) -> None:
+    write_text(path, "" if value is None else f"{value}\n", mutation=mutation)
+
+
+def delete_ref(path: Path, *, mutation: FileMutationWriter | None = None) -> None:
+    delete_path(path, mutation=mutation)

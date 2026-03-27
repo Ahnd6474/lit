@@ -152,7 +152,7 @@ class LitRepositorySession(RepositorySession):
     def merge(self, revision: str) -> SessionSnapshot:
         return self._run_repository_action(
             lambda repository: merge_revision(repository, revision),
-            on_success=lambda result: SnapshotFeedback(level="success", message=result.message),
+            on_success=self._merge_feedback,
             update_selections=self._merge_selections,
         )
 
@@ -181,7 +181,7 @@ class LitRepositorySession(RepositorySession):
     def rebase(self, revision: str) -> SessionSnapshot:
         return self._run_repository_action(
             lambda repository: rebase_onto(repository, revision),
-            on_success=lambda result: SnapshotFeedback(level="success", message=result.message),
+            on_success=self._rebase_feedback,
             update_selections=self._rebase_selections,
         )
 
@@ -327,3 +327,11 @@ class LitRepositorySession(RepositorySession):
             file_path=result.conflicts[0] if result.conflicts else self._selections.file_path,
             commit_id=result.commit_id if result.commit_id is not None else self._selections.commit_id,
         )
+
+    def _merge_feedback(self, result: MergeResult) -> SnapshotFeedback:
+        level = "info" if result.status in {"conflict", "noop"} else "success"
+        return SnapshotFeedback(level=level, message=result.message)
+
+    def _rebase_feedback(self, result: RebaseResult) -> SnapshotFeedback:
+        level = "info" if result.status in {"conflict", "noop"} else "success"
+        return SnapshotFeedback(level=level, message=result.message)

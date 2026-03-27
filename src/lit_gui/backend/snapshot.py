@@ -152,6 +152,10 @@ def build_snapshot(
             operation=operation,
             branches=branches,
             selected_branch=normalized.branch_name,
+            restore_suggestion=_restore_suggestion(
+                selected_change=normalized.change_path,
+                operation=operation,
+            ),
             feedback=feedback,
         ),
         files=_build_files_view(
@@ -308,6 +312,7 @@ def _build_repository_descriptor(
     status: StatusReport,
     operation: OperationState | None,
 ) -> RepositoryDescriptor:
+    operation_summary = _operation_summary(operation)
     return RepositoryDescriptor(
         name=repository.root.name or str(repository.root),
         root=repository.root,
@@ -315,7 +320,8 @@ def _build_repository_descriptor(
         head_commit=repository.current_commit_id(),
         status_text=_repository_status_text(repository, status, operation),
         is_lit_repository=True,
-        operation=_operation_summary(operation),
+        operation=operation_summary,
+        attention=_repository_attention(status=status, operation_summary=operation_summary),
     )
 
 
@@ -452,11 +458,22 @@ def _build_branches_view(
     operation: OperationState | None,
     branches: tuple[BranchSummary, ...],
     selected_branch: str | None,
+    restore_suggestion: str | None,
     feedback: SnapshotFeedback | None,
 ) -> BranchesViewState:
     selected = next((branch for branch in branches if branch.name == selected_branch), None)
+    can_checkout = _can_checkout(status, operation)
+    can_merge = _can_merge(repository, status, operation)
+    can_rebase = _can_rebase(repository, status, operation)
     guidance_title, guidance_body = _guidance(
-        base=_branch_guidance(status=status, operation=operation),
+        base=_branch_guidance(
+            repository=repository,
+            status=status,
+            operation=operation,
+            can_checkout=can_checkout,
+            can_merge=can_merge,
+            can_rebase=can_rebase,
+        ),
         feedback=feedback,
     )
     return BranchesViewState(
@@ -467,16 +484,31 @@ def _build_branches_view(
         highlights=(
             SummaryItem(label="Current branch", value=descriptor.current_branch or "detached"),
             SummaryItem(label="Branch count", value=str(len(branches))),
-            SummaryItem(label="Checkout readiness", value="Ready" if _can_checkout(status, operation) else "Blocked"),
+            SummaryItem(label="Checkout readiness", value="Ready" if can_checkout else "Blocked"),
+            SummaryItem(label="Merge readiness", value="Ready" if can_merge else "Blocked"),
+            SummaryItem(label="Rebase readiness", value="Ready" if can_rebase else "Blocked"),
         ),
         branches=branches,
         selected_branch=selected_branch,
-        can_checkout=_can_checkout(status, operation),
+        can_checkout=can_checkout,
+        can_merge=can_merge,
+        can_rebase=can_rebase,
+        restore_suggestion=restore_suggestion,
         detail=DetailPaneState.placeholder(
-            selection_title="Selected branch",
-            selection_body=_branch_selection_body(selected),
-            metadata_title="Branch metadata",
-            metadata_body=_branch_metadata(selected),
+            selection_title=_branch_selection_title(operation),
+            selection_body=_branch_selection_body(
+                selected=selected,
+                descriptor=descriptor,
+                operation=operation,
+            ),
+            metadata_title=_branch_metadata_title(operation),
+            metadata_body=_branch_metadata(
+                selected=selected,
+                descriptor=descriptor,
+                can_checkout=can_checkout,
+                can_merge=can_merge,
+                can_rebase=can_rebase,
+            ),
             guidance_title=guidance_title,
             guidance_body=guidance_body,
         ),
@@ -753,6 +785,28 @@ def _operation_summary(operation: OperationState | None) -> OperationSummary | N
     return OperationSummary(kind="rebase", summary=summary, conflicts=state.conflicts)
 
 
+def _repository_attention(
+    *,
+    status: StatusReport,
+    operation_summary: OperationSummary | None,
+) -> str:
+    if operation_summary is not None:
+        suffix = (
+            f" Resolve the conflicted path(s): {', '.join(operation_summary.conflicts)}."
+            if operation_summary.conflicts
+            else ""
+        )
+        return (
+            f"Manual resolution required. {operation_summary.summary}"
+            f"{suffix} Abort {operation_summary.kind} is available."
+        )
+    if not _can_checkout(status, None):
+        return "Checkout blocked until staged or tracked working tree changes are committed or restored."
+    if status.untracked:
+        return "Checkout is available, but untracked files can still block a specific target."
+    return "Working tree ready for checkout, merge, and rebase."
+
+
 def _can_commit(staged: tuple[ChangedPath, ...], operation: OperationState | None) -> bool:
     return bool(staged) and operation is None
 
@@ -873,12 +927,55 @@ def _render_commit_preview(repository: Repository, commit_id: str, path: str) ->
     return "File was removed by this commit."
 
 
-def _branch_guidance(*, status: StatusReport, operation: OperationState | None) -> str:
+def _branch_guidance(
+    *,
+    repository: Repository,
+    status: StatusReport,
+    operation: OperationState | None,
+    can_checkout: bool,
+    can_merge: bool,
+    can_rebase: bool,
+) -> str:
     if operation is not None:
-        return "Abort the active operation before checking out another branch."
-    if not _can_checkout(status, operation):
-        return "Clean tracked changes before checkout. Untracked files may still block specific targets."
-    return "Create a branch from the current HEAD or checkout another local branch or commit."
+        conflicts = operation.state.conflicts
+        if operation.kind == "merge":
+            target = _merge_target_label(operation.state)
+            if conflicts:
+                return (
+                    f"Manual resolution required for the merge from {target}. "
+                    f"Conflicted paths: {', '.join(conflicts)}. Use Restore to discard a path from HEAD "
+                    "or Abort Merge to return to the pre-merge tree."
+                )
+            return (
+                f"Merge in progress from {target}. Finish the working tree cleanup or abort the merge "
+                "before checking out another branch."
+            )
+        onto = _rebase_target_label(operation.state)
+        if conflicts:
+            return (
+                f"Manual resolution required for the rebase onto {onto}. "
+                f"Conflicted paths: {', '.join(conflicts)}. Use Restore to discard a path from HEAD "
+                "or Abort Rebase to return to the original branch tip."
+            )
+        return (
+            f"Rebase in progress onto {onto}. Finish the working tree cleanup or abort the rebase "
+            "before checking out another branch."
+        )
+    if not can_checkout:
+        return (
+            "Checkout is blocked by staged or tracked working tree changes. Commit them or use Restore "
+            "before switching branches or detaching HEAD."
+        )
+    if repository.current_branch_name() is None:
+        return "HEAD is detached. Checkout a branch before starting a merge or rebase."
+    if repository.current_commit_id() is None:
+        return "Create the first commit before starting a merge or rebase."
+    if status.untracked and not (can_merge and can_rebase):
+        return (
+            "Checkout is available, but untracked files can still block a specific target. "
+            "Merge and rebase require a fully clean tree, including untracked paths."
+        )
+    return "Create a branch from HEAD, checkout another local branch or commit, restore a path, or start a merge or rebase."
 
 
 def _can_checkout(status: StatusReport, operation: OperationState | None) -> bool:
@@ -895,7 +992,63 @@ def _can_checkout(status: StatusReport, operation: OperationState | None) -> boo
     )
 
 
-def _branch_selection_body(selected: BranchSummary | None) -> str:
+def _can_merge(
+    repository: Repository,
+    status: StatusReport,
+    operation: OperationState | None,
+) -> bool:
+    if operation is not None or not status.is_clean():
+        return False
+    return repository.current_branch_name() is not None and repository.current_commit_id() is not None
+
+
+def _can_rebase(
+    repository: Repository,
+    status: StatusReport,
+    operation: OperationState | None,
+) -> bool:
+    if operation is not None or not status.is_clean():
+        return False
+    return repository.current_branch_name() is not None and repository.current_commit_id() is not None
+
+
+def _branch_selection_title(operation: OperationState | None) -> str:
+    if operation is None:
+        return "Selected branch"
+    if operation.state.conflicts:
+        return "Manual resolution"
+    return "Active operation"
+
+
+def _branch_metadata_title(operation: OperationState | None) -> str:
+    if operation is None:
+        return "Branch metadata"
+    return "Operation metadata"
+
+
+def _branch_selection_body(
+    *,
+    selected: BranchSummary | None,
+    descriptor: RepositoryDescriptor,
+    operation: OperationState | None,
+) -> str:
+    if operation is not None:
+        current_branch = descriptor.current_branch or "detached"
+        if operation.kind == "merge":
+            target = _merge_target_label(operation.state)
+            lines = [f"{current_branch} has a merge in progress from {target}."]
+        else:
+            target = _rebase_target_label(operation.state)
+            lines = [f"{current_branch} is rebasing onto {target}."]
+            state = operation.state
+            assert isinstance(state, RebaseState)
+            if state.current_commit is not None:
+                lines.append(f"Current replay commit: {state.current_commit[:12]}")
+        if operation.state.conflicts:
+            lines.append(f"Conflicted paths: {', '.join(operation.state.conflicts)}")
+        else:
+            lines.append("No conflicted paths are currently recorded.")
+        return "\n".join(lines)
     if selected is None:
         return "No branch selected."
     target = selected.commit_id[:12] if selected.commit_id is not None else "unborn"
@@ -903,13 +1056,59 @@ def _branch_selection_body(selected: BranchSummary | None) -> str:
     return f"{prefix}: {selected.name} -> {target}"
 
 
-def _branch_metadata(selected: BranchSummary | None) -> str:
-    if selected is None:
-        return "No branch metadata available."
-    target = selected.commit_id or "unborn"
-    state = "current" if selected.is_current else "not current"
-    note = selected.note or "No branch note."
-    return f"Commit: {target}\nState: {state}\nNote: {note}"
+def _branch_metadata(
+    *,
+    selected: BranchSummary | None,
+    descriptor: RepositoryDescriptor,
+    can_checkout: bool,
+    can_merge: bool,
+    can_rebase: bool,
+) -> str:
+    head_label = descriptor.head_commit or "unborn"
+    lines = [
+        f"Current branch: {descriptor.current_branch or 'detached'}",
+        f"HEAD: {head_label}",
+        f"Checkout: {'ready' if can_checkout else 'blocked'}",
+        f"Merge: {'ready' if can_merge else 'blocked'}",
+        f"Rebase: {'ready' if can_rebase else 'blocked'}",
+    ]
+    if descriptor.operation is not None:
+        lines.append(f"Operation: {descriptor.operation.summary}")
+        if descriptor.operation.conflicts:
+            lines.append(f"Conflicts: {', '.join(descriptor.operation.conflicts)}")
+    if selected is not None:
+        target = selected.commit_id or "unborn"
+        state = "current" if selected.is_current else "not current"
+        note = selected.note or "No branch note."
+        lines.extend(
+            (
+                f"Selected branch: {selected.name}",
+                f"Selected target: {target}",
+                f"Selected state: {state}",
+                f"Selected note: {note}",
+            )
+        )
+    return "\n".join(lines)
+
+
+def _restore_suggestion(
+    *,
+    selected_change: str | None,
+    operation: OperationState | None,
+) -> str | None:
+    if selected_change is not None:
+        return selected_change
+    if operation is not None and operation.state.conflicts:
+        return operation.state.conflicts[0]
+    return None
+
+
+def _merge_target_label(state: MergeState) -> str:
+    return branch_name_from_ref(state.target_ref) or state.target_commit[:12]
+
+
+def _rebase_target_label(state: RebaseState) -> str:
+    return state.onto[:12]
 
 
 def _branch_note(branch: BranchRecord) -> str:

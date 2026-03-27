@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from lit_gui.contracts import NavigationTarget, SessionSnapshot, VIEW_ORDER
 from lit_gui.views._placeholders import PlaceholderView, build_placeholder_views
+from lit_gui.views.branches import BranchesView
 from lit_gui.views.changes import ChangesView
 from lit_gui.views.files import FilesView
 from lit_gui.views.history import HistoryView
@@ -20,6 +21,14 @@ def build_shell_views(
     on_select_commit,
     on_select_commit_path,
     on_select_file,
+    on_select_branch,
+    on_create_branch_requested,
+    on_checkout_requested,
+    on_restore_paths_requested,
+    on_merge_requested,
+    on_abort_merge_requested,
+    on_rebase_requested,
+    on_abort_rebase_requested,
     on_refresh_requested,
 ) -> dict[NavigationTarget, object]:
     views = build_placeholder_views(snapshot)
@@ -42,6 +51,18 @@ def build_shell_views(
         on_select_commit_path=on_select_commit_path,
         on_refresh_requested=on_refresh_requested,
     )
+    views[NavigationTarget.BRANCHES] = BranchesView(
+        snapshot.branches,
+        on_select_branch=on_select_branch,
+        on_create_branch_requested=on_create_branch_requested,
+        on_checkout_requested=on_checkout_requested,
+        on_restore_paths_requested=on_restore_paths_requested,
+        on_merge_requested=on_merge_requested,
+        on_abort_merge_requested=on_abort_merge_requested,
+        on_rebase_requested=on_rebase_requested,
+        on_abort_rebase_requested=on_abort_rebase_requested,
+        on_refresh_requested=on_refresh_requested,
+    )
     views[NavigationTarget.FILES] = FilesView(
         snapshot.files,
         on_select_file=on_select_file,
@@ -51,6 +72,7 @@ def build_shell_views(
 
 
 __all__ = [
+    "BranchesView",
     "ChangesView",
     "FilesView",
     "HistoryView",

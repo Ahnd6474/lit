@@ -32,6 +32,8 @@ class SidebarPanel(QtWidgets.QFrame):
         self._repository_label = QtWidgets.QLabel()
         self._root_label = QtWidgets.QLabel()
         self._branch_label = QtWidgets.QLabel()
+        self._status_label = QtWidgets.QLabel()
+        self._attention_label = QtWidgets.QLabel()
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -41,11 +43,15 @@ class SidebarPanel(QtWidgets.QFrame):
         self._repository_label.setWordWrap(True)
         self._root_label.setWordWrap(True)
         self._branch_label.setWordWrap(True)
+        self._status_label.setWordWrap(True)
+        self._attention_label.setWordWrap(True)
 
         layout.addWidget(self._title_label)
         layout.addWidget(self._repository_label)
         layout.addWidget(self._root_label)
         layout.addWidget(self._branch_label)
+        layout.addWidget(self._status_label)
+        layout.addWidget(self._attention_label)
 
         for target in VIEW_ORDER:
             button = QtWidgets.QPushButton(_navigation_label(target))
@@ -63,11 +69,16 @@ class SidebarPanel(QtWidgets.QFrame):
             self._repository_label.setText("No repository loaded")
             self._root_label.setText("Open a folder to start.")
             self._branch_label.setText("Branch: n/a")
+            self._status_label.setText("Status: n/a")
+            self._attention_label.setText("Attention: open or initialize a repository.")
             return
         self._repository_label.setText(f"Repository: {repository.name}")
         self._root_label.setText(f"Path: {repository.root}" if repository.root is not None else "Path: n/a")
         branch_name = repository.current_branch or "none"
         self._branch_label.setText(f"Branch: {branch_name}")
+        self._status_label.setText(f"Status: {repository.status_text}")
+        attention = repository.attention or "Repository state is ready."
+        self._attention_label.setText(f"Attention: {attention}")
 
     def set_active(self, target: NavigationTarget) -> None:
         for destination, button in self._buttons.items():
@@ -94,6 +105,14 @@ class LitShellWindow(QtWidgets.QMainWindow):
             on_select_commit=self._select_commit_requested,
             on_select_commit_path=self._select_commit_path_requested,
             on_select_file=self._select_file_requested,
+            on_select_branch=self._select_branch_requested,
+            on_create_branch_requested=self._create_branch_requested,
+            on_checkout_requested=self._checkout_requested,
+            on_restore_paths_requested=self._restore_paths_requested,
+            on_merge_requested=self._merge_requested,
+            on_abort_merge_requested=self._abort_merge_requested,
+            on_rebase_requested=self._rebase_requested,
+            on_abort_rebase_requested=self._abort_rebase_requested,
             on_refresh_requested=self._refresh_requested,
         )
         self._active_view = self._snapshot.default_view
@@ -203,3 +222,35 @@ class LitShellWindow(QtWidgets.QMainWindow):
     def _select_file_requested(self, path: str) -> None:
         snapshot = self._session.select_file(path)
         self.apply_snapshot(snapshot, preferred_view=NavigationTarget.FILES)
+
+    def _select_branch_requested(self, branch_name: str) -> None:
+        snapshot = self._session.select_branch(branch_name)
+        self.apply_snapshot(snapshot, preferred_view=NavigationTarget.BRANCHES)
+
+    def _create_branch_requested(self, name: str, start_point: str) -> None:
+        snapshot = self._session.create_branch(name, start_point=start_point)
+        self.apply_snapshot(snapshot, preferred_view=NavigationTarget.BRANCHES)
+
+    def _checkout_requested(self, revision: str) -> None:
+        snapshot = self._session.checkout(revision)
+        self.apply_snapshot(snapshot, preferred_view=NavigationTarget.BRANCHES)
+
+    def _restore_paths_requested(self, paths: tuple[str, ...], source: str | None) -> None:
+        snapshot = self._session.restore_paths(paths, source=source)
+        self.apply_snapshot(snapshot, preferred_view=NavigationTarget.BRANCHES)
+
+    def _merge_requested(self, revision: str) -> None:
+        snapshot = self._session.merge(revision)
+        self.apply_snapshot(snapshot, preferred_view=NavigationTarget.BRANCHES)
+
+    def _abort_merge_requested(self) -> None:
+        snapshot = self._session.abort_merge()
+        self.apply_snapshot(snapshot, preferred_view=NavigationTarget.BRANCHES)
+
+    def _rebase_requested(self, revision: str) -> None:
+        snapshot = self._session.rebase(revision)
+        self.apply_snapshot(snapshot, preferred_view=NavigationTarget.BRANCHES)
+
+    def _abort_rebase_requested(self) -> None:
+        snapshot = self._session.abort_rebase()
+        self.apply_snapshot(snapshot, preferred_view=NavigationTarget.BRANCHES)

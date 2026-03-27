@@ -46,6 +46,7 @@ class RepositoryDescriptor:
     status_text: str = ""
     is_lit_repository: bool = False
     operation: OperationSummary | None = None
+    attention: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,6 +185,9 @@ class BranchesViewState(BaseViewState):
     branches: tuple[BranchSummary, ...] = ()
     selected_branch: str | None = None
     can_checkout: bool = False
+    can_merge: bool = False
+    can_rebase: bool = False
+    restore_suggestion: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

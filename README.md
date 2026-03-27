@@ -42,6 +42,30 @@ python -m pip install -e .
 
 That installs the `lit` console command. During development, you can also run commands as `python -m lit ...` after installation.
 
+## Desktop GUI MVP
+
+After `python -m pip install -e .`, launch the desktop app with either command:
+
+```bash
+lit-gui
+# or
+python -m lit_gui.app
+```
+
+Local GUI smoke test:
+
+1. Open or initialize a folder from Home.
+2. Use Changes to stage files and create a commit.
+3. Use History to inspect commit metadata and per-file diffs.
+4. Use Branches to create a branch, checkout another branch or commit, restore a path, and start a merge or rebase.
+5. If merge or rebase stops with conflicts, use the sidebar and right detail panel to review the conflicted paths and use the Branches abort action if you want to roll back the operation.
+
+To verify the current repository locally, run:
+
+```bash
+python -m pytest
+```
+
 ## Quick Start
 
 ```bash

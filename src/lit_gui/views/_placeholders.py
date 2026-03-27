@@ -27,6 +27,7 @@ class PlaceholderView(QtWidgets.QWidget):
         self.title_label = QtWidgets.QLabel(state.title)
         self.subtitle_label = QtWidgets.QLabel(state.subtitle)
         self.section_titles: tuple[str, ...] = ()
+        self._sections: list[tuple[QtWidgets.QGroupBox, QtWidgets.QLabel]] = []
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -37,19 +38,32 @@ class PlaceholderView(QtWidgets.QWidget):
         layout.addWidget(self.title_label)
         layout.addWidget(self.subtitle_label)
 
-        sections = tuple(_sections_for_state(state))
-        self.section_titles = tuple(title for title, _ in sections)
-        for title, lines in sections:
+        for title, lines in _sections_for_state(state):
             group = QtWidgets.QGroupBox()
             group.setTitle(title)
             group_layout = QtWidgets.QVBoxLayout(group)
-            for line in lines:
-                label = QtWidgets.QLabel(line)
-                label.setWordWrap(True)
-                group_layout.addWidget(label)
+            label = QtWidgets.QLabel()
+            label.setWordWrap(True)
+            group_layout.addWidget(label)
+            self._sections.append((group, label))
             layout.addWidget(group)
 
         layout.addStretch(1)
+        self.apply_state(state)
+
+    def apply_state(
+        self,
+        state: HomeViewState | ChangesViewState | HistoryViewState | BranchesViewState | FilesViewState,
+    ) -> None:
+        self.state = state
+        self.title_label.setText(state.title)
+        self.subtitle_label.setText(state.subtitle)
+        sections = tuple(_sections_for_state(state))
+        self.section_titles = tuple(title for title, _ in sections)
+        for index, (title, lines) in enumerate(sections):
+            group, label = self._sections[index]
+            group.setTitle(title)
+            label.setText("\n".join(lines))
 
 
 def build_placeholder_views(snapshot: SessionSnapshot) -> dict[NavigationTarget, PlaceholderView]:

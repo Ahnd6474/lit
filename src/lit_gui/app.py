@@ -24,6 +24,7 @@ from lit_gui.contracts import (
     SummaryItem,
 )
 from lit_gui.shell import LitShellWindow
+from lit_gui.session import LitRepositorySession
 
 
 class PreviewRepositorySession(RepositorySession):
@@ -270,7 +271,7 @@ def create_application(argv: Sequence[str] | None = None) -> QtWidgets.QApplicat
 
 def build_window(session: RepositorySession | None = None) -> LitShellWindow:
     create_application([])
-    return LitShellWindow(session=session or PreviewRepositorySession())
+    return LitShellWindow(session=session or LitRepositorySession())
 
 
 def main(argv: Sequence[str] | None = None) -> int:

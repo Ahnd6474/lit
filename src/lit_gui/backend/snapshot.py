@@ -155,36 +155,37 @@ def _build_non_repository_snapshot(
     recent: tuple[RecentRepository, ...],
     feedback: SnapshotFeedback | None,
 ) -> SessionSnapshot:
+    folder_status = _folder_status(root)
+    current_folder_value = str(root)
+    call_to_action = _non_repository_call_to_action(root)
+    subtitle = _non_repository_subtitle(root)
     guidance_title, guidance_body = _guidance(
-        base=(
-            "Initialize this folder to create a local-only repository, or open another folder "
-            "that already contains .lit metadata."
-        ),
+        base=_non_repository_guidance(root),
         feedback=feedback,
     )
     descriptor = RepositoryDescriptor(
         name=root.name or str(root),
         root=root,
-        status_text="No .lit metadata detected yet.",
+        status_text=folder_status,
         is_lit_repository=False,
     )
     home = HomeViewState(
         route=NavigationTarget.HOME,
         title="Repository Home",
-        subtitle="Open an existing lit repository or initialize this folder in place.",
+        subtitle=subtitle,
         context=descriptor,
         highlights=(
-            SummaryItem(label="Current folder", value=str(root)),
-            SummaryItem(label="Repository status", value="Not initialized"),
+            SummaryItem(label="Current folder", value=current_folder_value),
+            SummaryItem(label="Repository status", value=folder_status),
             SummaryItem(label="Default branch", value="main"),
         ),
         recent_repositories=recent,
-        call_to_action="Initialize this folder to start local-only history.",
+        call_to_action=call_to_action,
         detail=DetailPaneState.placeholder(
             selection_title="Selected repository",
             selection_body=descriptor.name,
             metadata_title="Workspace metadata",
-            metadata_body="No .lit directory was found in this folder.",
+            metadata_body=_non_repository_metadata(root),
             guidance_title=guidance_title,
             guidance_body=guidance_body,
         ),
@@ -260,7 +261,7 @@ def _build_non_repository_snapshot(
         subtitle="Repository file browsing appears after opening a repository.",
         context=descriptor,
         highlights=(
-            SummaryItem(label="Root", value=str(root)),
+            SummaryItem(label="Root", value=current_folder_value),
             SummaryItem(label="Visible nodes", value="0"),
         ),
         tree=(),
@@ -517,7 +518,7 @@ def _build_recent_repositories(
         summary = (
             _repository_status_text(repository, repository.status(), repository.current_operation())
             if root == active_root and repository is not None
-            else "lit repository" if is_lit_repository else "Initialize this folder to start local history."
+            else _recent_repository_summary(root, is_lit_repository)
         )
         entries.append(
             RecentRepository(
@@ -941,3 +942,56 @@ def _truncate_text(text: str) -> str:
     if len(text) <= _MAX_PREVIEW_CHARS:
         return text
     return text[:_MAX_PREVIEW_CHARS].rstrip() + "\n...\n[truncated]"
+
+
+def _folder_status(root: Path) -> str:
+    if root.exists() and root.is_dir():
+        return "No .lit metadata detected yet."
+    if root.exists():
+        return "Selected path is not a folder."
+    return "Folder does not exist yet."
+
+
+def _non_repository_subtitle(root: Path) -> str:
+    if root.exists() and root.is_dir():
+        return "Open an existing lit repository or initialize this folder in place."
+    if root.exists():
+        return "Choose a folder path to open or initialize a local-only repository."
+    return "Open an existing lit repository or initialize this new folder in place."
+
+
+def _non_repository_call_to_action(root: Path) -> str:
+    if root.exists() and root.is_dir():
+        return "Initialize this folder to start local-only history."
+    if root.exists():
+        return "Enter a folder path, then open or initialize it."
+    return "Initialize this folder to create it and start local-only history."
+
+
+def _non_repository_guidance(root: Path) -> str:
+    if root.exists() and root.is_dir():
+        return (
+            "Initialize this folder to create a local-only repository, or open another folder "
+            "that already contains .lit metadata."
+        )
+    if root.exists():
+        return "The selected path is not a folder. Pick a directory before opening or initializing."
+    return "This folder does not exist yet. Initialize it to create the directory and .lit metadata."
+
+
+def _non_repository_metadata(root: Path) -> str:
+    if root.exists() and root.is_dir():
+        return "No .lit directory was found in this folder."
+    if root.exists():
+        return "The selected path points to a file, so repository actions are unavailable."
+    return "The selected folder has not been created yet."
+
+
+def _recent_repository_summary(root: Path, is_lit_repository: bool) -> str:
+    if is_lit_repository:
+        return "lit repository"
+    if root.exists() and root.is_dir():
+        return "Initialize this folder to start local history."
+    if root.exists():
+        return "Path is not a folder."
+    return "Folder unavailable."

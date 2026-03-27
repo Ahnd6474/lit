@@ -9,28 +9,42 @@ from lit.rebase_ops import RebaseResult, rebase_onto
 from lit.repository import CheckoutRecord, Repository
 from lit_gui.backend import SnapshotFeedback, SnapshotSelections, build_snapshot
 from lit_gui.contracts import RepositorySession, SessionSnapshot
+from lit_gui.persistence import RecentRepositoriesStore
 
 _T = TypeVar("_T")
 
 
 class LitRepositorySession(RepositorySession):
-    def __init__(self, root: Path | None = None) -> None:
-        self._root = (root or Path.cwd()).resolve()
+    def __init__(
+        self,
+        root: Path | None = None,
+        *,
+        recent_store: RecentRepositoriesStore | None = None,
+    ) -> None:
+        self._recent_store = recent_store or RecentRepositoriesStore()
+        self._root = self._resolve_root(root or Path.cwd())
         self._repository: Repository | None = self._reload_repository(self._root)
-        self._recent_roots: tuple[Path, ...] = ()
+        self._recent_roots: tuple[Path, ...] = self._recent_store.load()
         self._selections = SnapshotSelections()
         self._feedback: SnapshotFeedback | None = None
-        self._remember_recent(self._root)
         self._snapshot = self._rebuild_snapshot()
 
     def snapshot(self) -> SessionSnapshot:
         return self._snapshot
 
     def open_repository(self, root: Path) -> SessionSnapshot:
-        self._root = Path(root).resolve()
+        self._root = self._resolve_root(root)
+        validation_error = self._validate_open_root(self._root)
+        if validation_error is not None:
+            self._repository = None
+            self._selections = SnapshotSelections()
+            return self._rebuild_snapshot(
+                feedback=SnapshotFeedback(level="error", message=validation_error)
+            )
+
         self._repository = self._reload_repository(self._root)
         self._selections = SnapshotSelections()
-        self._remember_recent(self._root)
+        self._remember_recent(self._root, persist=True)
         if self._repository is None:
             return self._rebuild_snapshot(
                 feedback=SnapshotFeedback(
@@ -46,11 +60,19 @@ class LitRepositorySession(RepositorySession):
         )
 
     def initialize_repository(self, root: Path) -> SessionSnapshot:
-        self._root = Path(root).resolve()
+        self._root = self._resolve_root(root)
+        validation_error = self._validate_initialize_root(self._root)
+        if validation_error is not None:
+            self._repository = None
+            self._selections = SnapshotSelections()
+            return self._rebuild_snapshot(
+                feedback=SnapshotFeedback(level="error", message=validation_error)
+            )
+
         already_initialized = (self._root / ".lit").is_dir()
         self._repository = Repository.create(self._root)
         self._selections = SnapshotSelections()
-        self._remember_recent(self._root)
+        self._remember_recent(self._root, persist=True)
         message = (
             f"Opened existing lit repository at {self._root}."
             if already_initialized
@@ -229,16 +251,33 @@ class LitRepositorySession(RepositorySession):
         )
         return self._snapshot
 
-    def _remember_recent(self, root: Path) -> None:
+    def _remember_recent(self, root: Path, *, persist: bool = False) -> None:
         ordered = [root]
         ordered.extend(existing for existing in self._recent_roots if existing != root)
         self._recent_roots = tuple(ordered[:5])
+        if persist:
+            self._recent_store.save(self._recent_roots)
 
     def _reload_repository(self, root: Path) -> Repository | None:
         try:
             return Repository.open(root)
         except FileNotFoundError:
             return None
+
+    def _resolve_root(self, root: Path) -> Path:
+        return Path(root).expanduser().resolve()
+
+    def _validate_open_root(self, root: Path) -> str | None:
+        if not root.exists():
+            return f"Folder not found: {root}."
+        if not root.is_dir():
+            return f"Path is not a folder: {root}."
+        return None
+
+    def _validate_initialize_root(self, root: Path) -> str | None:
+        if root.exists() and not root.is_dir():
+            return f"Path is not a folder: {root}."
+        return None
 
     def _commit_feedback(self, commit_id: str, message: str) -> SnapshotFeedback:
         branch_name = self._repository.current_branch_name() if self._repository is not None else None

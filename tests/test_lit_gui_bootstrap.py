@@ -121,12 +121,12 @@ def test_shell_updates_shared_detail_slots_when_view_changes(monkeypatch: pytest
         contracts.DetailSlotId.GUIDANCE,
     )
     assert window.detail_slots.slot_title(contracts.DetailSlotId.SELECTION) == "Selected repository"
-    assert "open a folder" in window.detail_slots.slot_body(contracts.DetailSlotId.GUIDANCE).lower()
+    assert "initialize this folder" in window.detail_slots.slot_body(contracts.DetailSlotId.GUIDANCE).lower()
 
     window.show_view(contracts.NavigationTarget.HISTORY)
 
     assert window.detail_slots.slot_title(contracts.DetailSlotId.SELECTION) == "Selected commit"
-    assert "commit summaries" in window.detail_slots.slot_body(contracts.DetailSlotId.METADATA).lower()
+    assert "commit history appears here" in window.detail_slots.slot_body(contracts.DetailSlotId.METADATA).lower()
 
 
 def _import_gui_modules(monkeypatch: pytest.MonkeyPatch):
@@ -163,6 +163,7 @@ def _install_fake_pyside6(monkeypatch: pytest.MonkeyPatch) -> None:
             self.minimum_width = None
             self.maximum_width = None
             self.visible = False
+            self.enabled = True
 
         def setLayout(self, layout) -> None:
             self._layout = layout
@@ -187,6 +188,21 @@ def _install_fake_pyside6(monkeypatch: pytest.MonkeyPatch) -> None:
 
         def show(self) -> None:
             self.visible = True
+
+        def hide(self) -> None:
+            self.visible = False
+
+        def setVisible(self, visible: bool) -> None:
+            self.visible = visible
+
+        def isVisible(self) -> bool:
+            return self.visible
+
+        def setEnabled(self, enabled: bool) -> None:
+            self.enabled = enabled
+
+        def isEnabled(self) -> bool:
+            return self.enabled
 
     class _MainWindow(_Widget):
         def __init__(self, parent=None) -> None:
@@ -239,6 +255,17 @@ def _install_fake_pyside6(monkeypatch: pytest.MonkeyPatch) -> None:
 
         def isChecked(self) -> bool:
             return self._checked
+
+    class _LineEdit(_Widget):
+        def __init__(self, text: str = "", parent=None) -> None:
+            super().__init__(parent)
+            self._text = text
+
+        def setText(self, text: str) -> None:
+            self._text = text
+
+        def text(self) -> str:
+            return self._text
 
     class _Frame(_Widget):
         pass
@@ -343,6 +370,7 @@ def _install_fake_pyside6(monkeypatch: pytest.MonkeyPatch) -> None:
     qtwidgets.QGroupBox = _GroupBox
     qtwidgets.QHBoxLayout = _HBoxLayout
     qtwidgets.QLabel = _Label
+    qtwidgets.QLineEdit = _LineEdit
     qtwidgets.QMainWindow = _MainWindow
     qtwidgets.QPushButton = _PushButton
     qtwidgets.QSplitter = _Splitter

@@ -1,0 +1,2 @@
+[console_scripts]
+lit = lit.cli:main

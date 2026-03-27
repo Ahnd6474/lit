@@ -11,7 +11,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from lit.cli import build_parser
+from lit.backend_api import (
+    BackendService,
+    CreateCheckpointRequest,
+    CreateRevisionRequest,
+    OpenRepositoryRequest,
+    RepositoryHandle,
+)
 from lit.commits import CommitMetadata, CommitRecord, commit_id, deserialize_commit, serialize_commit
+from lit.domain import ApprovalState, ProvenanceRecord, RevisionRecord, VerificationStatus
+from lit.layout import LitLayout
 from lit.merge_ops import merge_revision
 from lit.refs import branch_ref
 from lit.rebase_ops import rebase_onto
@@ -74,6 +83,82 @@ def test_commit_serialization_is_deterministic() -> None:
     )
     assert deserialize_commit(serialized) == record
     assert commit_id(record) == commit_id(record)
+
+
+def test_v1_contract_modules_freeze_layout_and_backend_surface(tmp_path: Path) -> None:
+    legacy_revision = RevisionRecord.from_dict(
+        {
+            "tree": "abc123",
+            "parents": ["base1"],
+            "message": "bootstrap",
+            "metadata": {
+                "author": "lit",
+                "committed_at": "2026-03-26T00:00:00Z",
+            },
+        }
+    )
+
+    assert legacy_revision.schema_version == 0
+    assert legacy_revision.tree == "abc123"
+    assert legacy_revision.parents == ("base1",)
+    assert legacy_revision.provenance.actor_role == "legacy"
+    assert legacy_revision.provenance.actor_id == "lit"
+    assert legacy_revision.provenance.committed_at == "2026-03-26T00:00:00Z"
+    assert legacy_revision.provenance.verification_status is VerificationStatus.NEVER_VERIFIED
+    assert legacy_revision.to_dict()["provenance"]["verification_status"] == "never_verified"
+
+    layout = LitLayout(tmp_path)
+    assert layout.branch_path("feature/demo") == tmp_path / ".lit" / "refs" / "heads" / "feature" / "demo"
+    assert layout.revision_path("rev-1") == tmp_path / ".lit" / "v1" / "revisions" / "rev-1.json"
+    assert layout.checkpoint_path("cp-1") == tmp_path / ".lit" / "v1" / "checkpoints" / "cp-1.json"
+    assert layout.lineage_path("main") == tmp_path / ".lit" / "v1" / "lineages" / "main.json"
+    assert layout.verification_path("ver-1") == tmp_path / ".lit" / "v1" / "verifications" / "ver-1.json"
+    assert layout.artifact_record_path("art-1") == (
+        tmp_path / ".lit" / "v1" / "artifacts" / "art-1" / "artifact.json"
+    )
+    assert layout.lock_path() == tmp_path / ".lit" / "v1" / "locks" / "repository.lock"
+
+    handle = RepositoryHandle.for_root(tmp_path, current_branch="main", is_initialized=True)
+    assert handle.layout.revisions == layout.revisions
+    assert handle.current_branch == "main"
+    assert handle.is_initialized is True
+
+    open_request = OpenRepositoryRequest(root=tmp_path, create_if_missing=True)
+    revision_request = CreateRevisionRequest(
+        root=tmp_path,
+        message="ship",
+        provenance=ProvenanceRecord(lineage_id="main"),
+    )
+    checkpoint_request = CreateCheckpointRequest(
+        root=tmp_path,
+        revision_id="rev-1",
+        approval_state=ApprovalState.PENDING,
+    )
+
+    assert open_request.create_if_missing is True
+    assert revision_request.provenance.lineage_id == "main"
+    assert checkpoint_request.safe is True
+    assert checkpoint_request.approval_state is ApprovalState.PENDING
+    assert {
+        "open_repository",
+        "initialize_repository",
+        "get_repository_state",
+        "list_revisions",
+        "get_revision",
+        "create_revision",
+        "list_checkpoints",
+        "get_checkpoint",
+        "create_checkpoint",
+        "rollback_to_checkpoint",
+        "list_lineages",
+        "get_lineage",
+        "create_lineage",
+        "promote_lineage",
+        "record_verification",
+        "get_verification",
+        "list_artifacts",
+        "get_artifact",
+    } <= BackendService.__abstractmethods__
 
 
 def test_repository_branch_dag_and_operation_primitives(tmp_path: Path) -> None:

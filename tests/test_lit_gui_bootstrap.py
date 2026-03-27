@@ -92,8 +92,12 @@ def test_gui_contracts_are_immutable_and_route_all_views() -> None:
         contracts.RepositorySession()
 
 
-def test_shell_builds_three_pane_placeholder_navigation(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_shell_builds_three_pane_placeholder_navigation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     app_module, contracts = _import_gui_modules(monkeypatch)
+    monkeypatch.chdir(tmp_path)
 
     window = app_module.build_window()
 
@@ -110,8 +114,12 @@ def test_shell_builds_three_pane_placeholder_navigation(monkeypatch: pytest.Monk
     assert window.sidebar.is_active(contracts.NavigationTarget.BRANCHES) is True
 
 
-def test_shell_updates_shared_detail_slots_when_view_changes(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_shell_updates_shared_detail_slots_when_view_changes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     app_module, contracts = _import_gui_modules(monkeypatch)
+    monkeypatch.chdir(tmp_path)
 
     window = app_module.build_window()
 

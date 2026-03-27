@@ -260,9 +260,11 @@ def _install_fake_pyside6(monkeypatch: pytest.MonkeyPatch) -> None:
         def __init__(self, text: str = "", parent=None) -> None:
             super().__init__(parent)
             self._text = text
+            self.textChanged = _Signal()
 
         def setText(self, text: str) -> None:
             self._text = text
+            self.textChanged.emit(text)
 
         def text(self) -> str:
             return self._text

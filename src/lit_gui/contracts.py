@@ -174,6 +174,7 @@ class HistoryViewState(BaseViewState):
     highlights: tuple[SummaryItem, ...] = ()
     commits: tuple[CommitSummary, ...] = ()
     selected_commit: str | None = None
+    selected_path: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,6 +260,10 @@ class RepositorySession(ABC):
     @abstractmethod
     def select_commit(self, commit_id: str) -> SessionSnapshot:
         """Update the selected history item and its shared detail slots."""
+
+    @abstractmethod
+    def select_commit_path(self, path: str | None) -> SessionSnapshot:
+        """Update the selected changed file for the current history item."""
 
     @abstractmethod
     def create_branch(self, name: str, *, start_point: str | None = "HEAD") -> SessionSnapshot:

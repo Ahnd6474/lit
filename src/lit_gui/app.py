@@ -64,6 +64,9 @@ class PreviewRepositorySession(RepositorySession):
     def select_commit(self, commit_id: str) -> SessionSnapshot:
         return self._snapshot
 
+    def select_commit_path(self, path: str | None) -> SessionSnapshot:
+        return self._snapshot
+
     def create_branch(self, name: str, *, start_point: str | None = "HEAD") -> SessionSnapshot:
         return self._snapshot
 
@@ -184,6 +187,7 @@ class PreviewRepositorySession(RepositorySession):
                 ),
             ),
             selected_commit=None,
+            selected_path=None,
             detail=DetailPaneState.placeholder(
                 selection_title="Selected commit",
                 selection_body="Pick a commit once RepositorySession is backed by the log view.",

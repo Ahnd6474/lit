@@ -121,7 +121,11 @@ class LitRepositorySession(RepositorySession):
         return self._rebuild_snapshot()
 
     def select_commit(self, commit_id: str) -> SessionSnapshot:
-        self._selections = replace(self._selections, commit_id=commit_id)
+        self._selections = replace(self._selections, commit_id=commit_id, commit_path=None)
+        return self._rebuild_snapshot()
+
+    def select_commit_path(self, path: str | None) -> SessionSnapshot:
+        self._selections = replace(self._selections, commit_path=path)
         return self._rebuild_snapshot()
 
     def create_branch(self, name: str, *, start_point: str | None = "HEAD") -> SessionSnapshot:

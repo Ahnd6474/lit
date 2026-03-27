@@ -88,6 +88,11 @@ class LitShellWindow(QtWidgets.QMainWindow):
             on_open_requested=self._open_repository_requested,
             on_initialize_requested=self._initialize_repository_requested,
             on_recent_requested=self._open_repository_requested,
+            on_select_change=self._select_change_requested,
+            on_stage_paths_requested=self._stage_paths_requested,
+            on_commit_requested=self._commit_requested,
+            on_select_commit=self._select_commit_requested,
+            on_select_commit_path=self._select_commit_path_requested,
             on_select_file=self._select_file_requested,
             on_refresh_requested=self._refresh_requested,
         )
@@ -174,6 +179,26 @@ class LitShellWindow(QtWidgets.QMainWindow):
     def _refresh_requested(self) -> None:
         snapshot = self._session.refresh()
         self.apply_snapshot(snapshot, preferred_view=self._active_view)
+
+    def _select_change_requested(self, path: str) -> None:
+        snapshot = self._session.select_change(path)
+        self.apply_snapshot(snapshot, preferred_view=NavigationTarget.CHANGES)
+
+    def _stage_paths_requested(self, paths: tuple[str, ...]) -> None:
+        snapshot = self._session.stage_paths(paths)
+        self.apply_snapshot(snapshot, preferred_view=NavigationTarget.CHANGES)
+
+    def _commit_requested(self, message: str) -> None:
+        snapshot = self._session.commit(message)
+        self.apply_snapshot(snapshot, preferred_view=NavigationTarget.CHANGES)
+
+    def _select_commit_requested(self, commit_id: str) -> None:
+        snapshot = self._session.select_commit(commit_id)
+        self.apply_snapshot(snapshot, preferred_view=NavigationTarget.HISTORY)
+
+    def _select_commit_path_requested(self, path: str | None) -> None:
+        snapshot = self._session.select_commit_path(path)
+        self.apply_snapshot(snapshot, preferred_view=NavigationTarget.HISTORY)
 
     def _select_file_requested(self, path: str) -> None:
         snapshot = self._session.select_file(path)

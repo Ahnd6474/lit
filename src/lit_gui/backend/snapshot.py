@@ -36,6 +36,7 @@ _MAX_DIRECTORY_PREVIEW_ITEMS = 12
 class SnapshotSelections:
     change_path: str | None = None
     commit_id: str | None = None
+    commit_path: str | None = None
     branch_name: str | None = None
     file_path: str | None = None
 
@@ -91,6 +92,7 @@ def build_snapshot(
             available=tuple(commit.commit_id for commit in commits),
             fallback=repository.current_commit_id(),
         ),
+        commit_path=None,
         branch_name=_pick_selection(
             preferred=selections.branch_name,
             available=tuple(branch.name for branch in branches),
@@ -101,6 +103,20 @@ def build_snapshot(
             available=tuple(node.path for node in tree),
             fallback=_first_file_path(tree),
         ),
+    )
+    selected_commit = next(
+        (commit for commit in commits if commit.commit_id == normalized.commit_id),
+        None,
+    )
+    normalized = SnapshotSelections(
+        change_path=normalized.change_path,
+        commit_id=normalized.commit_id,
+        commit_path=_pick_selection(
+            preferred=selections.commit_path,
+            available=selected_commit.changed_paths if selected_commit is not None else (),
+        ),
+        branch_name=normalized.branch_name,
+        file_path=normalized.file_path,
     )
 
     snapshot = SessionSnapshot(
@@ -126,6 +142,7 @@ def build_snapshot(
             descriptor=descriptor,
             commits=commits,
             selected_commit=normalized.commit_id,
+            selected_path=normalized.commit_path,
             feedback=feedback,
         ),
         branches=_build_branches_view(
@@ -395,6 +412,7 @@ def _build_history_view(
     descriptor: RepositoryDescriptor,
     commits: tuple[CommitSummary, ...],
     selected_commit: str | None,
+    selected_path: str | None,
     feedback: SnapshotFeedback | None,
 ) -> HistoryViewState:
     selected = next((commit for commit in commits if commit.commit_id == selected_commit), None)
@@ -410,14 +428,16 @@ def _build_history_view(
         highlights=(
             SummaryItem(label="Visible commits", value=str(len(commits))),
             SummaryItem(label="Selected commit", value=selected_commit[:12] if selected_commit else "None"),
+            SummaryItem(label="Selected file", value=selected_path or "None"),
         ),
         commits=commits,
         selected_commit=selected_commit,
+        selected_path=selected_path,
         detail=DetailPaneState.placeholder(
-            selection_title="Selected commit",
-            selection_body=_commit_selection_body(selected),
+            selection_title="Selected file diff" if selected_path else "Selected commit",
+            selection_body=_commit_selection_body(repository, selected, selected_path),
             metadata_title="Commit metadata",
-            metadata_body=_commit_metadata(repository, selected),
+            metadata_body=_commit_metadata(repository, selected, selected_path),
             guidance_title=guidance_title,
             guidance_body=guidance_body,
         ),
@@ -795,27 +815,62 @@ def _render_change_preview(repository: Repository, path: str) -> str:
     return "File was removed from the working tree."
 
 
-def _commit_selection_body(selected: CommitSummary | None) -> str:
+def _commit_selection_body(
+    repository: Repository,
+    selected: CommitSummary | None,
+    selected_path: str | None,
+) -> str:
     if selected is None:
         return "No commit selected."
-    return selected.message or "(empty commit message)"
+    if selected_path is None:
+        return selected.message or "(empty commit message)"
+    return _truncate_text(_render_commit_preview(repository, selected.commit_id, selected_path))
 
 
-def _commit_metadata(repository: Repository, selected: CommitSummary | None) -> str:
+def _commit_metadata(
+    repository: Repository,
+    selected: CommitSummary | None,
+    selected_path: str | None,
+) -> str:
     if selected is None:
         return "No commit metadata available."
 
     record = repository.read_commit(selected.commit_id)
     parents = ", ".join(parent[:12] for parent in record.parents) or "none"
-    changed = ", ".join(selected.changed_paths) or "none"
     committed_at = selected.committed_at or "unknown"
-    return (
-        f"Commit: {selected.commit_id}\n"
-        f"Author: {selected.author or 'lit'}\n"
-        f"Committed at: {committed_at}\n"
-        f"Parents: {parents}\n"
-        f"Changed paths: {changed}"
+    lines = [
+        f"Commit: {selected.commit_id}",
+        f"Message: {selected.message or '(empty commit message)'}",
+        f"Author: {selected.author or 'lit'}",
+        f"Committed at: {committed_at}",
+        f"Parents: {parents}",
+        f"Changed paths: {', '.join(selected.changed_paths) or 'none'}",
+    ]
+    if selected_path is not None:
+        lines.append(f"Selected path: {selected_path}")
+    return "\n".join(lines)
+
+
+def _render_commit_preview(repository: Repository, commit_id: str, path: str) -> str:
+    record = repository.read_commit(commit_id)
+    current = repository.read_commit_tree(commit_id).get(path)
+    parent = repository.read_commit_tree(record.primary_parent).get(path)
+    before = [] if parent is None else _decode_blob_lines(repository, parent)
+    after = [] if current is None else _decode_blob_lines(repository, current)
+    diff_lines = list(
+        unified_diff(
+            before,
+            after,
+            fromfile=f"a/{path}",
+            tofile=f"b/{path}",
+            lineterm="",
+        )
     )
+    if diff_lines:
+        return "\n".join(diff_lines)
+    if current is not None:
+        return repository.read_object("blobs", current.digest).decode("utf-8", errors="replace")
+    return "File was removed by this commit."
 
 
 def _branch_guidance(*, status: StatusReport, operation: OperationState | None) -> str:

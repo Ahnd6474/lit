@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from lit.storage import read_json, write_json
+from lit.storage import FileMutationWriter, read_json, write_json
 
 OperationKind = Literal["merge", "rebase"]
 
@@ -95,8 +95,13 @@ def read_merge_state(path: Path) -> MergeState | None:
     return MergeState.from_dict(data)
 
 
-def write_merge_state(path: Path, state: MergeState | None) -> None:
-    write_json(path, None if state is None else state.to_dict())
+def write_merge_state(
+    path: Path,
+    state: MergeState | None,
+    *,
+    mutation: FileMutationWriter | None = None,
+) -> None:
+    write_json(path, None if state is None else state.to_dict(), mutation=mutation)
 
 
 def read_rebase_state(path: Path) -> RebaseState | None:
@@ -106,8 +111,13 @@ def read_rebase_state(path: Path) -> RebaseState | None:
     return RebaseState.from_dict(data)
 
 
-def write_rebase_state(path: Path, state: RebaseState | None) -> None:
-    write_json(path, None if state is None else state.to_dict())
+def write_rebase_state(
+    path: Path,
+    state: RebaseState | None,
+    *,
+    mutation: FileMutationWriter | None = None,
+) -> None:
+    write_json(path, None if state is None else state.to_dict(), mutation=mutation)
 
 
 def active_operation(

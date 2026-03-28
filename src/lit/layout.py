@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from lit.refs import normalize_branch_name
 
 LAYOUT_SCHEMA_VERSION = 1
+ObjectKind = Literal["blobs", "trees", "commits"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +59,12 @@ class LitLayout:
     @property
     def commits(self) -> Path:
         return self.objects / "commits"
+
+    def object_dir(self, kind: ObjectKind) -> Path:
+        return getattr(self, kind)
+
+    def object_path(self, kind: ObjectKind, object_id: str) -> Path:
+        return self.object_dir(kind) / object_id
 
     @property
     def state(self) -> Path:
@@ -139,6 +147,9 @@ class LitLayout:
     def journal_path(self, operation_id: str) -> Path:
         return self.journals / f"{operation_id}.jsonl"
 
+    def journal_dir(self, operation_id: str) -> Path:
+        return self.journals / operation_id
+
     def lock_path(self, name: str = "repository") -> Path:
         return self.locks / f"{name}.lock"
 
@@ -165,4 +176,4 @@ class LitLayout:
         )
 
 
-__all__ = ["LAYOUT_SCHEMA_VERSION", "LitLayout"]
+__all__ = ["LAYOUT_SCHEMA_VERSION", "LitLayout", "ObjectKind"]

@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Literal, Mapping
 
-from lit.commits import CommitRecord, deserialize_commit, serialize_commit
+from lit.commits import CommitMetadata, CommitRecord, deserialize_commit, serialize_commit
+from lit.domain import ApprovalState, CheckpointRecord, LineageRecord, ProvenanceRecord, RevisionRecord
 from lit.index import IndexEntry, IndexState, read_index, write_index
 from lit.refs import (
     branch_name_from_ref,
@@ -28,6 +29,7 @@ from lit.state import (
 )
 from lit.storage import hash_bytes, read_json, write_json
 from lit.trees import TreeEntry, TreeRecord, deserialize_tree, serialize_tree
+from lit.transactions import next_identifier, utc_now
 from lit.working_tree import FileSnapshot, normalize_repo_path, scan_working_tree
 
 ObjectKind = Literal["blobs", "trees", "commits"]
@@ -157,6 +159,10 @@ class RepositoryLayout:
         return self.refs / "tags"
 
     @property
+    def v1(self) -> Path:
+        return self.dot_lit / "v1"
+
+    @property
     def objects(self) -> Path:
         return self.dot_lit / "objects"
 
@@ -184,6 +190,38 @@ class RepositoryLayout:
     def rebase_state(self) -> Path:
         return self.state / "rebase.json"
 
+    @property
+    def revisions(self) -> Path:
+        return self.v1 / "revisions"
+
+    @property
+    def checkpoints(self) -> Path:
+        return self.v1 / "checkpoints"
+
+    @property
+    def lineages(self) -> Path:
+        return self.v1 / "lineages"
+
+    @property
+    def verifications(self) -> Path:
+        return self.v1 / "verifications"
+
+    @property
+    def artifacts(self) -> Path:
+        return self.v1 / "artifacts"
+
+    @property
+    def operations(self) -> Path:
+        return self.v1 / "operations"
+
+    @property
+    def journals(self) -> Path:
+        return self.v1 / "journals"
+
+    @property
+    def locks(self) -> Path:
+        return self.v1 / "locks"
+
     def branch_path(self, branch_name: str) -> Path:
         return self.heads / normalize_branch_name(branch_name)
 
@@ -193,9 +231,43 @@ class RepositoryLayout:
     def object_path(self, kind: ObjectKind, object_id: str) -> Path:
         return self.object_dir(kind) / object_id
 
+    def revision_path(self, revision_id: str) -> Path:
+        return self.revisions / f"{revision_id}.json"
+
+    def checkpoint_path(self, checkpoint_id: str) -> Path:
+        return self.checkpoints / f"{checkpoint_id}.json"
+
+    def lineage_path(self, lineage_id: str) -> Path:
+        return self.lineages / f"{lineage_id}.json"
+
+    def verification_path(self, verification_id: str) -> Path:
+        return self.verifications / f"{verification_id}.json"
+
+    def artifact_dir(self, artifact_id: str) -> Path:
+        return self.artifacts / artifact_id
+
+    def artifact_record_path(self, artifact_id: str) -> Path:
+        return self.artifact_dir(artifact_id) / "artifact.json"
+
+    def artifact_payload_path(self, artifact_id: str, filename: str = "payload") -> Path:
+        return self.artifact_dir(artifact_id) / filename
+
+    def operation_path(self, operation_id: str) -> Path:
+        return self.operations / f"{operation_id}.json"
+
+    def journal_path(self, operation_id: str) -> Path:
+        return self.journals / f"{operation_id}.jsonl"
+
+    def journal_dir(self, operation_id: str) -> Path:
+        return self.journals / operation_id
+
+    def lock_path(self, name: str = "repository") -> Path:
+        return self.locks / f"{name}.lock"
+
     def directories(self) -> tuple[Path, ...]:
         return (
             self.dot_lit,
+            self.v1,
             self.objects,
             self.blobs,
             self.trees,
@@ -204,6 +276,14 @@ class RepositoryLayout:
             self.heads,
             self.tags,
             self.state,
+            self.revisions,
+            self.checkpoints,
+            self.lineages,
+            self.verifications,
+            self.artifacts,
+            self.operations,
+            self.journals,
+            self.locks,
         )
 
 
@@ -216,6 +296,7 @@ class Repository:
     @classmethod
     def create(cls, root: str | Path, *, default_branch: str = "main") -> "Repository":
         repository_root = Path(root).resolve()
+        repository_root.mkdir(parents=True, exist_ok=True)
         layout = RepositoryLayout(repository_root)
         existed = layout.dot_lit.exists()
         config = RepositoryConfig(default_branch=normalize_branch_name(default_branch))
@@ -235,6 +316,17 @@ class Repository:
             write_merge_state(layout.merge_state, None)
         if not layout.rebase_state.exists():
             write_rebase_state(layout.rebase_state, None)
+        if not layout.lineage_path(config.default_branch).exists():
+            now = utc_now()
+            write_json(
+                layout.lineage_path(config.default_branch),
+                LineageRecord(
+                    lineage_id=config.default_branch,
+                    created_at=now,
+                    updated_at=now,
+                    title=config.default_branch,
+                ).to_dict(),
+            )
 
         repository = cls.open(repository_root)
         if not existed and repository.current_branch_name() is None:
@@ -449,6 +541,8 @@ class Repository:
     def resolve_revision(self, revision: str | None = None) -> str | None:
         if revision in (None, "HEAD"):
             return self.current_commit_id()
+        if self.layout.checkpoint_path(revision).exists():
+            return self.get_checkpoint(revision).revision_id
         branch_name = self.resolve_branch_name(revision)
         if branch_name is not None:
             branch_commit = self.read_branch(branch_name)
@@ -459,6 +553,42 @@ class Repository:
 
     def read_commit(self, commit_id: str) -> CommitRecord:
         return deserialize_commit(self.read_object("commits", commit_id))
+
+    def get_revision(self, revision_id: str) -> RevisionRecord:
+        path = self.layout.revision_path(revision_id)
+        if path.exists():
+            record = RevisionRecord.from_dict(read_json(path, default=None))
+        else:
+            commit = self.read_commit(revision_id)
+            record = RevisionRecord(
+                revision_id=revision_id,
+                tree=commit.tree,
+                parents=commit.parents,
+                message=commit.message,
+                provenance=commit.metadata.to_provenance(),
+            )
+        if record.revision_id is None:
+            data = record.to_dict()
+            data["revision_id"] = revision_id
+            return RevisionRecord.from_dict(data)
+        return record
+
+    def list_revisions(
+        self,
+        *,
+        start_revision: str | None = None,
+        lineage_id: str | None = None,
+    ) -> tuple[RevisionRecord, ...]:
+        if lineage_id is not None and start_revision is None:
+            try:
+                start_revision = self.get_lineage(lineage_id).head_revision
+            except FileNotFoundError:
+                return ()
+        history = self.iter_commit_graph(self.resolve_revision(start_revision))
+        revisions = [self.get_revision(commit_id) for commit_id, _ in history]
+        if lineage_id is None:
+            return tuple(revisions)
+        return tuple(record for record in revisions if record.provenance.lineage_id == lineage_id)
 
     def iter_history(self, start_commit: str | None = None) -> tuple[tuple[str, CommitRecord], ...]:
         history: list[tuple[str, CommitRecord]] = []
@@ -622,7 +752,14 @@ class Repository:
         self.write_index(index_state)
         return tuple(sorted(staged_updates.values(), key=lambda entry: entry.path))
 
-    def commit(self, message: str, *, parents: Iterable[str] | None = None) -> str:
+    def commit(
+        self,
+        message: str,
+        *,
+        parents: Iterable[str] | None = None,
+        provenance: ProvenanceRecord | None = None,
+        artifact_ids: tuple[str, ...] = (),
+    ) -> str:
         index_state = self.read_index()
         if not index_state.entries:
             raise ValueError("nothing staged for commit")
@@ -637,15 +774,137 @@ class Repository:
 
         tree_id = self._store_tree(tracked_files)
         resolved_parents = tuple(parents) if parents is not None else (() if head_commit is None else (head_commit,))
-        record = CommitRecord(tree=tree_id, parents=resolved_parents, message=message)
+        normalized = self._normalize_provenance(provenance)
+        record = CommitRecord(
+            tree=tree_id,
+            parents=resolved_parents,
+            message=message,
+            metadata=CommitMetadata.from_provenance(normalized),
+        )
         commit_id = self.store_object("commits", serialize_commit(record))
+        write_json(
+            self.layout.revision_path(commit_id),
+            RevisionRecord(
+                revision_id=commit_id,
+                tree=tree_id,
+                parents=resolved_parents,
+                message=message,
+                provenance=normalized,
+                artifact_ids=artifact_ids,
+            ).to_dict(),
+        )
 
         branch_name = self.current_branch_name()
         if branch_name is None:
             raise RuntimeError("commits require HEAD to point to a branch")
         self.write_branch(branch_name, commit_id)
         self.write_index(IndexState())
+        if normalized.lineage_id is not None:
+            self._ensure_lineage(normalized.lineage_id, head_revision=commit_id)
         return commit_id
+
+    def list_checkpoints(
+        self,
+        *,
+        lineage_id: str | None = None,
+        only_safe: bool = False,
+    ) -> tuple[CheckpointRecord, ...]:
+        if not self.layout.checkpoints.exists():
+            return ()
+        checkpoints = [
+            CheckpointRecord.from_dict(read_json(path, default=None))
+            for path in sorted(self.layout.checkpoints.glob("*.json"))
+        ]
+        if lineage_id is not None:
+            checkpoints = [
+                checkpoint
+                for checkpoint in checkpoints
+                if checkpoint.provenance.lineage_id == lineage_id
+            ]
+        if only_safe:
+            checkpoints = [checkpoint for checkpoint in checkpoints if checkpoint.safe]
+        checkpoints.sort(
+            key=lambda checkpoint: (
+                checkpoint.created_at or "",
+                checkpoint.checkpoint_id or "",
+            )
+        )
+        return tuple(checkpoints)
+
+    def get_checkpoint(self, checkpoint_id: str) -> CheckpointRecord:
+        path = self.layout.checkpoint_path(checkpoint_id)
+        if not path.exists():
+            raise FileNotFoundError(f"checkpoint not found: {checkpoint_id}")
+        return CheckpointRecord.from_dict(read_json(path, default=None))
+
+    def latest_safe_checkpoint_id(self, *, lineage_id: str | None = None) -> str | None:
+        safe = self.list_checkpoints(lineage_id=lineage_id, only_safe=True)
+        return None if not safe else safe[-1].checkpoint_id
+
+    def latest_safe_checkpoint(self, *, lineage_id: str | None = None) -> CheckpointRecord | None:
+        checkpoint_id = self.latest_safe_checkpoint_id(lineage_id=lineage_id)
+        return None if checkpoint_id is None else self.get_checkpoint(checkpoint_id)
+
+    def create_checkpoint(
+        self,
+        *,
+        revision_id: str,
+        name: str | None = None,
+        note: str | None = None,
+        safe: bool = True,
+        pinned: bool = False,
+        approval_state: ApprovalState = ApprovalState.NOT_REQUESTED,
+        approval_note: str | None = None,
+        provenance: ProvenanceRecord | None = None,
+        artifact_ids: tuple[str, ...] = (),
+    ) -> CheckpointRecord:
+        resolved_revision = self.resolve_revision(revision_id)
+        if resolved_revision is None:
+            raise ValueError(f"unknown revision: {revision_id}")
+        revision = self.get_revision(resolved_revision)
+        normalized = self._normalize_provenance(
+            provenance,
+            fallback=revision.provenance,
+        )
+        checkpoint = CheckpointRecord(
+            checkpoint_id=next_identifier("checkpoint"),
+            revision_id=resolved_revision,
+            name=name,
+            note=note,
+            created_at=utc_now(),
+            safe=safe,
+            pinned=pinned,
+            approval_state=approval_state,
+            approval_note=approval_note,
+            provenance=normalized,
+            verification_id=revision.verification_id,
+            artifact_ids=artifact_ids,
+        )
+        write_json(self.layout.checkpoint_path(checkpoint.checkpoint_id or ""), checkpoint.to_dict())
+        self._append_revision_checkpoint(resolved_revision, checkpoint.checkpoint_id or "")
+        if normalized.lineage_id is not None:
+            self._ensure_lineage(
+                normalized.lineage_id,
+                head_revision=resolved_revision,
+                checkpoint_id=checkpoint.checkpoint_id,
+            )
+        return checkpoint
+
+    def list_lineages(self) -> tuple[LineageRecord, ...]:
+        if not self.layout.lineages.exists():
+            return ()
+        records = [
+            LineageRecord.from_dict(read_json(path, default=None))
+            for path in sorted(self.layout.lineages.glob("*.json"))
+        ]
+        records.sort(key=lambda record: (record.created_at or "", record.lineage_id))
+        return tuple(records)
+
+    def get_lineage(self, lineage_id: str) -> LineageRecord:
+        path = self.layout.lineage_path(normalize_branch_name(lineage_id))
+        if not path.exists():
+            raise FileNotFoundError(f"lineage not found: {lineage_id}")
+        return LineageRecord.from_dict(read_json(path, default=None))
 
     def status(self) -> StatusReport:
         head_files = self.read_commit_tree(self.current_commit_id())
@@ -812,6 +1071,79 @@ class Repository:
             branch_name=target_branch,
             restored_paths=restored_paths,
         )
+
+    def _normalize_provenance(
+        self,
+        provenance: ProvenanceRecord | None,
+        *,
+        fallback: ProvenanceRecord | None = None,
+    ) -> ProvenanceRecord:
+        base = provenance or fallback or ProvenanceRecord()
+        return ProvenanceRecord(
+            actor_role=base.actor_role,
+            actor_id=base.actor_id,
+            prompt_template=base.prompt_template,
+            agent_family=base.agent_family,
+            run_id=base.run_id,
+            block_id=base.block_id,
+            step_id=base.step_id,
+            lineage_id=base.lineage_id or self.current_branch_name() or self.config.default_branch,
+            verification_status=base.verification_status,
+            verification_summary=base.verification_summary,
+            committed_at=base.committed_at or utc_now(),
+            origin_commit=base.origin_commit,
+            rewritten_from=base.rewritten_from,
+            promoted_from=base.promoted_from,
+        )
+
+    def _append_revision_checkpoint(self, revision_id: str, checkpoint_id: str) -> None:
+        revision = self.get_revision(revision_id)
+        write_json(
+            self.layout.revision_path(revision_id),
+            RevisionRecord(
+                revision_id=revision.revision_id,
+                tree=revision.tree,
+                parents=revision.parents,
+                message=revision.message,
+                provenance=revision.provenance,
+                verification_id=revision.verification_id,
+                artifact_ids=revision.artifact_ids,
+                checkpoint_ids=self._append_unique(revision.checkpoint_ids, (checkpoint_id,)),
+            ).to_dict(),
+        )
+
+    def _ensure_lineage(
+        self,
+        lineage_id: str,
+        *,
+        head_revision: str | None = None,
+        forked_from: str | None = None,
+        promoted_from: str | None = None,
+        checkpoint_id: str | None = None,
+        title: str | None = None,
+        description: str | None = None,
+    ) -> object:
+        from lit.lineage import upsert_lineage_record
+
+        return upsert_lineage_record(
+            self.layout,
+            lineage_id,
+            head_revision=head_revision,
+            forked_from=forked_from,
+            promoted_from=promoted_from,
+            checkpoint_id=checkpoint_id,
+            title=title,
+            description=description,
+        )
+
+    def _append_unique(self, existing: tuple[str, ...], additional: tuple[str, ...]) -> tuple[str, ...]:
+        ordered = list(existing)
+        seen = set(existing)
+        for item in additional:
+            if item not in seen:
+                ordered.append(item)
+                seen.add(item)
+        return tuple(ordered)
 
     def _populate_tree(
         self,

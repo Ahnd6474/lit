@@ -39,6 +39,22 @@ def _string_tuple(value: object | None) -> tuple[str, ...]:
     return (str(value),)
 
 
+def _normalize_lineage_ids(
+    value: object | None,
+    *,
+    exclude: Iterable[str] = (),
+) -> tuple[str, ...]:
+    normalized: list[str] = []
+    seen = {normalize_branch_name(item) for item in exclude}
+    for item in _string_tuple(value):
+        candidate = normalize_branch_name(item)
+        if candidate in seen:
+            continue
+        normalized.append(candidate)
+        seen.add(candidate)
+    return tuple(normalized)
+
+
 def _append_unique(existing: tuple[str, ...], additional: tuple[str, ...]) -> tuple[str, ...]:
     ordered = list(existing)
     seen = set(existing)
@@ -178,7 +194,9 @@ class ManagedLineage:
             status=status,
             checkpoint_ids=_string_tuple(data.get("checkpoint_ids")),
             owned_paths=_normalize_owned_paths(_string_tuple(data.get("owned_paths"))),
-            allow_owned_path_overlap_with=_string_tuple(data.get("allow_owned_path_overlap_with")),
+            allow_owned_path_overlap_with=_normalize_lineage_ids(
+                data.get("allow_owned_path_overlap_with"),
+            ),
         )
 
     def to_domain_record(self) -> DomainLineageRecord:
@@ -346,7 +364,10 @@ def upsert_lineage_record(
         allow_owned_path_overlap_with=(
             existing.allow_owned_path_overlap_with
             if allow_owned_path_overlap_with is None
-            else _string_tuple(allow_owned_path_overlap_with)
+            else _normalize_lineage_ids(
+                allow_owned_path_overlap_with,
+                exclude=(normalized,),
+            )
         ),
     )
     write_lineage_record(layout, updated, mutation=mutation)
@@ -398,7 +419,10 @@ class LineageService:
             base_checkpoint_id=base_checkpoint_id,
         )
         normalized_owned_paths = _normalize_owned_paths(owned_paths)
-        allow_overlap = _string_tuple(allow_owned_path_overlap_with)
+        allow_overlap = _normalize_lineage_ids(
+            allow_owned_path_overlap_with,
+            exclude=(normalized,),
+        )
         conflicts = self._reservation_conflicts(
             requested_lineage_id=normalized,
             owned_paths=normalized_owned_paths,
@@ -468,11 +492,11 @@ class LineageService:
                 related_lineage_id=source.lineage_id,
                 detail=f"source lineage is {source.status.value}",
             )
-        if destination.status is LineageStatus.DISCARDED:
+        if destination.status is not LineageStatus.ACTIVE:
             conflicts[(PromotionConflictType.INACTIVE_DESTINATION.value, None, destination.lineage_id)] = PromotionConflict(
                 conflict_type=PromotionConflictType.INACTIVE_DESTINATION,
                 related_lineage_id=destination.lineage_id,
-                detail="destination lineage is discarded",
+                detail=f"destination lineage is {destination.status.value}",
             )
 
         for path in source_changed_paths:
@@ -499,7 +523,7 @@ class LineageService:
             for path in paths_under_promotion:
                 if not _path_within_scopes(path, other.owned_paths):
                     continue
-                if self._overlap_allowed(source, other) or self._overlap_allowed(destination, other):
+                if self._promotion_overlap_allowed(source, destination, other):
                     continue
                 conflicts[(PromotionConflictType.RESERVED_BY_LINEAGE.value, path, other.lineage_id)] = PromotionConflict(
                     conflict_type=PromotionConflictType.RESERVED_BY_LINEAGE,
@@ -689,6 +713,20 @@ class LineageService:
 
     def _overlap_allowed(self, left: ManagedLineage, right: ManagedLineage) -> bool:
         return left.allows_overlap_with(right.lineage_id) or right.allows_overlap_with(left.lineage_id)
+
+    def _promotion_overlap_allowed(
+        self,
+        source: ManagedLineage,
+        destination: ManagedLineage,
+        other: ManagedLineage,
+    ) -> bool:
+        if other.allows_overlap_with(destination.lineage_id):
+            return True
+        resulting_allowances = _append_unique(
+            destination.allow_owned_path_overlap_with,
+            source.allow_owned_path_overlap_with,
+        )
+        return other.lineage_id in resulting_allowances
 
     def _baseline_revision(
         self,

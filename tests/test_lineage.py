@@ -85,7 +85,7 @@ def test_lineage_service_rejects_overlapping_owned_paths_without_explicit_rule(t
     beta = service.create_lineage(
         "beta",
         owned_paths=("src/app.py",),
-        allow_owned_path_overlap_with=("alpha",),
+        allow_owned_path_overlap_with=("refs/heads/alpha",),
     )
     assert beta.allow_owned_path_overlap_with == ("alpha",)
 
@@ -185,6 +185,117 @@ def test_lineage_service_promotes_without_conflicts_and_preserves_state(tmp_path
     assert promoted_destination.head_revision == feature_commit
     assert "feature.txt" in promoted_destination.owned_paths
     assert Repository.open(tmp_path).read_branch("main") == feature_commit
+
+
+def test_lineage_service_preview_blocks_promotion_when_resulting_reservation_is_unsafe(
+    tmp_path: Path,
+) -> None:
+    repo = Repository.create(tmp_path)
+    base_commit = _commit_file(
+        repo,
+        "shared.txt",
+        "base\n",
+        "base",
+        ProvenanceRecord(actor_role="executor", actor_id="agent-main", lineage_id="main"),
+    )
+    repo.create_checkpoint(
+        revision_id=base_commit,
+        name="base-safe",
+        safe=True,
+        provenance=ProvenanceRecord(actor_role="reviewer", actor_id="human", lineage_id="main"),
+    )
+
+    service = LineageService.open(tmp_path)
+    service.create_lineage("feature", owned_paths=("shared.txt",))
+    service.create_lineage(
+        "shadow",
+        owned_paths=("shared.txt",),
+        allow_owned_path_overlap_with=("feature",),
+    )
+    service.switch_lineage("feature")
+    feature_repo = Repository.open(tmp_path)
+    _commit_file(
+        feature_repo,
+        "shared.txt",
+        "feature\n",
+        "feature update",
+        ProvenanceRecord(actor_role="executor", actor_id="agent-feature", lineage_id="feature"),
+    )
+    service.switch_lineage("main")
+
+    preview = service.preview_promotion_conflicts("feature", "main")
+    reserved = [
+        conflict
+        for conflict in preview.conflicts
+        if conflict.conflict_type is PromotionConflictType.RESERVED_BY_LINEAGE
+    ]
+
+    assert reserved
+    assert reserved[0].path == "shared.txt"
+    assert reserved[0].related_lineage_id == "shadow"
+
+    with pytest.raises(PromotionConflictError):
+        service.promote_lineage("feature", destination_lineage_id="main")
+
+
+def test_lineage_service_treats_promoted_destination_as_inactive_for_promotion_preview(
+    tmp_path: Path,
+) -> None:
+    repo = Repository.create(tmp_path)
+    base_commit = _commit_file(
+        repo,
+        "base.txt",
+        "base\n",
+        "base",
+        ProvenanceRecord(actor_role="executor", actor_id="agent-main", lineage_id="main"),
+    )
+    repo.create_checkpoint(
+        revision_id=base_commit,
+        name="base-safe",
+        safe=True,
+        provenance=ProvenanceRecord(actor_role="reviewer", actor_id="human", lineage_id="main"),
+    )
+
+    service = LineageService.open(tmp_path)
+    service.create_lineage("release", owned_paths=("release.txt",))
+    service.create_lineage("feature", owned_paths=("feature.txt",))
+
+    service.switch_lineage("feature")
+    feature_repo = Repository.open(tmp_path)
+    _commit_file(
+        feature_repo,
+        "feature.txt",
+        "feature\n",
+        "feature update",
+        ProvenanceRecord(actor_role="executor", actor_id="agent-feature", lineage_id="feature"),
+    )
+    service.switch_lineage("main")
+
+    service.switch_lineage("release")
+    release_repo = Repository.open(tmp_path)
+    _commit_file(
+        release_repo,
+        "release.txt",
+        "release\n",
+        "release update",
+        ProvenanceRecord(actor_role="executor", actor_id="agent-release", lineage_id="release"),
+    )
+    service.switch_lineage("main")
+    service.promote_lineage("release", destination_lineage_id="main")
+
+    preview = service.preview_promotion_conflicts("feature", "release")
+    inactive = [
+        conflict
+        for conflict in preview.conflicts
+        if conflict.conflict_type is PromotionConflictType.INACTIVE_DESTINATION
+    ]
+
+    assert service.get_lineage("release").status is LineageStatus.PROMOTED
+    assert inactive
+    assert inactive[0].related_lineage_id == "release"
+
+    with pytest.raises(PromotionConflictError):
+        service.promote_lineage("feature", destination_lineage_id="release")
 
 
 def _commit_file(

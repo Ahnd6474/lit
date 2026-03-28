@@ -5,7 +5,14 @@ from pathlib import Path
 from typing import Iterable, Literal, Mapping
 
 from lit.commits import CommitMetadata, CommitRecord, deserialize_commit, serialize_commit
-from lit.domain import ApprovalState, CheckpointRecord, LineageRecord, ProvenanceRecord, RevisionRecord
+from lit.domain import (
+    ApprovalState,
+    ArtifactRecord,
+    CheckpointRecord,
+    LineageRecord,
+    ProvenanceRecord,
+    RevisionRecord,
+)
 from lit.index import IndexEntry, IndexState, read_index, write_index
 from lit.refs import (
     branch_name_from_ref,
@@ -573,6 +580,12 @@ class Repository:
             return RevisionRecord.from_dict(data)
         return record
 
+    def current_revision(self) -> RevisionRecord | None:
+        revision_id = self.current_commit_id()
+        if revision_id is None:
+            return None
+        return self.get_revision(revision_id)
+
     def list_revisions(
         self,
         *,
@@ -589,6 +602,28 @@ class Repository:
         if lineage_id is None:
             return tuple(revisions)
         return tuple(record for record in revisions if record.provenance.lineage_id == lineage_id)
+
+    def changed_files(
+        self,
+        revision_id: str | None = None,
+        *,
+        since_revision: str | None = None,
+    ) -> tuple[str, ...]:
+        resolved_revision = self.resolve_revision(revision_id)
+        if resolved_revision is None:
+            return ()
+        revision = self.get_revision(resolved_revision)
+        baseline = since_revision
+        if baseline is None and revision.parents:
+            baseline = revision.parents[0]
+        resolved_baseline = self.resolve_revision(baseline) if baseline is not None else None
+        before = {} if resolved_baseline is None else self.read_commit_tree(resolved_baseline)
+        after = self.read_commit_tree(resolved_revision)
+        changed: list[str] = []
+        for path in sorted(set(before) | set(after)):
+            if before.get(path) != after.get(path):
+                changed.append(path)
+        return tuple(changed)
 
     def iter_history(self, start_commit: str | None = None) -> tuple[tuple[str, CommitRecord], ...]:
         history: list[tuple[str, CommitRecord]] = []
@@ -845,6 +880,50 @@ class Repository:
         checkpoint_id = self.latest_safe_checkpoint_id(lineage_id=lineage_id)
         return None if checkpoint_id is None else self.get_checkpoint(checkpoint_id)
 
+    def rollback_to_checkpoint(
+        self,
+        checkpoint_id: str | None = None,
+        *,
+        use_latest_safe: bool = True,
+        lineage_id: str | None = None,
+    ) -> CheckpointRecord:
+        scoped_lineage = lineage_id or self.current_branch_name()
+        checkpoint: CheckpointRecord | None = None
+        if checkpoint_id is not None:
+            checkpoint = self.get_checkpoint(checkpoint_id)
+        elif use_latest_safe:
+            checkpoint = self.latest_safe_checkpoint(lineage_id=scoped_lineage)
+            if checkpoint is None and scoped_lineage is not None:
+                checkpoint = self.latest_safe_checkpoint()
+        if checkpoint is None:
+            candidates = self.list_checkpoints(lineage_id=scoped_lineage)
+            if not candidates and scoped_lineage is not None:
+                candidates = self.list_checkpoints()
+            if not candidates:
+                raise FileNotFoundError("no checkpoints available for rollback")
+            checkpoint = candidates[-1]
+        target_revision = self.resolve_revision(checkpoint.revision_id)
+        if target_revision is None:
+            raise FileNotFoundError(
+                f"checkpoint {checkpoint.checkpoint_id} points to an unknown revision"
+            )
+        current_commit = self.current_commit_id()
+        self._ensure_checkout_safe(target_revision, baseline_commit=current_commit)
+        self.apply_commit(target_revision, baseline_commit=current_commit)
+        branch_name = self.current_branch_name()
+        if branch_name is not None:
+            self.write_branch(branch_name, target_revision)
+        else:
+            self.set_head_commit(target_revision)
+        lineage_target = scoped_lineage or checkpoint.provenance.lineage_id
+        if lineage_target is not None:
+            self._ensure_lineage(
+                lineage_target,
+                head_revision=target_revision,
+                checkpoint_id=checkpoint.checkpoint_id,
+            )
+        return checkpoint
+
     def create_checkpoint(
         self,
         *,
@@ -905,6 +984,220 @@ class Repository:
         if not path.exists():
             raise FileNotFoundError(f"lineage not found: {lineage_id}")
         return LineageRecord.from_dict(read_json(path, default=None))
+
+    def list_managed_lineages(self, *, include_inactive: bool = True) -> tuple[object, ...]:
+        from lit.lineage import LineageService
+
+        return LineageService.open(self.root).list_lineages(include_inactive=include_inactive)
+
+    def get_managed_lineage(self, lineage_id: str) -> object:
+        from lit.lineage import LineageService
+
+        return LineageService.open(self.root).get_lineage(lineage_id)
+
+    def create_lineage(
+        self,
+        lineage_id: str,
+        *,
+        forked_from: str | None = None,
+        base_checkpoint_id: str | None = None,
+        owned_paths: tuple[str | Path, ...] = (),
+        allow_owned_path_overlap_with: tuple[str, ...] = (),
+        title: str = "",
+        description: str = "",
+    ) -> object:
+        from lit.lineage import LineageService
+
+        return LineageService.open(self.root).create_lineage(
+            lineage_id,
+            forked_from=forked_from,
+            base_checkpoint_id=base_checkpoint_id,
+            owned_paths=owned_paths,
+            allow_owned_path_overlap_with=allow_owned_path_overlap_with,
+            title=title,
+            description=description,
+        )
+
+    def preview_promotion_conflicts(
+        self,
+        lineage_id: str,
+        destination_lineage_id: str | None = None,
+    ) -> object:
+        from lit.lineage import LineageService
+
+        return LineageService.open(self.root).preview_promotion_conflicts(
+            lineage_id,
+            destination_lineage_id,
+        )
+
+    def promote_lineage(
+        self,
+        lineage_id: str,
+        *,
+        destination_lineage_id: str | None = None,
+        expected_head_revision: str | None = None,
+        allow_conflicts: bool = False,
+    ) -> object:
+        from lit.lineage import LineageService
+
+        return LineageService.open(self.root).promote_lineage(
+            lineage_id,
+            destination_lineage_id=destination_lineage_id,
+            expected_head_revision=expected_head_revision,
+            allow_conflicts=allow_conflicts,
+        )
+
+    def discard_lineage(self, lineage_id: str) -> object:
+        from lit.lineage import LineageService
+
+        return LineageService.open(self.root).discard_lineage(lineage_id)
+
+    def list_verifications(
+        self,
+        *,
+        owner_kind: str | None = None,
+        owner_id: str | None = None,
+    ) -> tuple[object, ...]:
+        from lit.verification import VerificationRecordStore
+
+        return VerificationRecordStore(self.layout).list_records(
+            owner_kind=owner_kind,
+            owner_id=owner_id,
+        )
+
+    def get_verification(self, verification_id: str) -> object:
+        from lit.verification import VerificationRecordStore
+
+        return VerificationRecordStore(self.layout).get_record(verification_id)
+
+    def verification_status(
+        self,
+        *,
+        owner_kind: str,
+        owner_id: str | None,
+        linked_verification_id: str | None = None,
+        state_fingerprint: str | None = None,
+        environment_fingerprint: str | None = None,
+        command_identity: str | None = None,
+    ) -> object:
+        from lit.verification import (
+            VerificationCacheService,
+            VerificationRecordStore,
+            VerificationSummaryService,
+        )
+
+        store = VerificationRecordStore(self.layout)
+        cache = VerificationCacheService(store)
+        summary = VerificationSummaryService(store, cache)
+        return summary.summarize_owner(
+            owner_kind=owner_kind,
+            owner_id=owner_id,
+            linked_verification_id=linked_verification_id,
+            state_fingerprint=state_fingerprint,
+            environment_fingerprint=environment_fingerprint,
+            command_identity=command_identity,
+        )
+
+    def run_verification(
+        self,
+        *,
+        owner_kind: str,
+        owner_id: str | None,
+        definition_name: str | None = None,
+        command: tuple[str, ...] = (),
+        command_identity: str | None = None,
+        state_fingerprint: str | None = None,
+        environment_fingerprint: str | None = None,
+        allow_cache: bool = True,
+    ) -> object:
+        from lit.verification import (
+            VerificationCacheService,
+            VerificationRecordStore,
+            VerificationRunService,
+        )
+
+        store = VerificationRecordStore(self.layout)
+        cache = VerificationCacheService(store)
+        service = VerificationRunService(
+            self.layout,
+            records=store,
+            cache=cache,
+        )
+        record = service.verify(
+            owner_kind=owner_kind,
+            owner_id=owner_id,
+            definition_name=definition_name,
+            command=command,
+            command_identity=command_identity,
+            state_fingerprint=state_fingerprint,
+            environment_fingerprint=environment_fingerprint,
+            allow_cache=allow_cache,
+        )
+        if record.verification_id is None:
+            return record
+        if owner_kind == "revision" and owner_id is not None:
+            self._attach_revision_verification(owner_id, record.verification_id)
+        elif owner_kind == "checkpoint" and owner_id is not None:
+            self._attach_checkpoint_verification(owner_id, record.verification_id)
+        return record
+
+    def list_artifact_manifests(
+        self,
+        *,
+        owner_kind: str | None = None,
+        owner_id: str | None = None,
+    ) -> tuple[object, ...]:
+        from lit.artifact_store import ArtifactStore
+
+        return ArtifactStore().list_manifests(
+            self.root,
+            owner_kind=owner_kind,
+            owner_id=owner_id,
+        )
+
+    def get_artifact_manifest(self, artifact_id: str) -> object:
+        from lit.artifact_store import ArtifactStore
+
+        return ArtifactStore().read_manifest(self.root, artifact_id)
+
+    def list_artifacts(
+        self,
+        *,
+        owner_kind: str | None = None,
+        owner_id: str | None = None,
+    ) -> tuple[object, ...]:
+        return tuple(
+            manifest.to_record()
+            for manifest in self.list_artifact_manifests(
+                owner_kind=owner_kind,
+                owner_id=owner_id,
+            )
+        )
+
+    def get_artifact(self, artifact_id: str) -> ArtifactRecord:
+        return self.get_artifact_manifest(artifact_id).to_record()
+
+    def link_artifact(
+        self,
+        artifact_id: str,
+        *,
+        owner_kind: str,
+        owner_id: str,
+        relationship: str = "attached",
+        note: str | None = None,
+        pinned: bool | None = None,
+    ) -> object:
+        from lit.artifact_store import ArtifactStore
+
+        return ArtifactStore().link_artifact_to_owner(
+            self.root,
+            artifact_id,
+            owner_kind=owner_kind,
+            owner_id=owner_id,
+            relationship=relationship,
+            note=note,
+            pinned=pinned,
+        )
 
     def status(self) -> StatusReport:
         head_files = self.read_commit_tree(self.current_commit_id())
@@ -1112,6 +1405,44 @@ class Repository:
             ).to_dict(),
         )
 
+    def _attach_revision_verification(self, revision_id: str, verification_id: str) -> None:
+        revision = self.get_revision(revision_id)
+        verification = self.get_verification(verification_id)
+        write_json(
+            self.layout.revision_path(revision_id),
+            RevisionRecord(
+                revision_id=revision.revision_id,
+                tree=revision.tree,
+                parents=revision.parents,
+                message=revision.message,
+                provenance=self._provenance_with_verification(revision.provenance, verification),
+                verification_id=verification_id,
+                artifact_ids=revision.artifact_ids,
+                checkpoint_ids=revision.checkpoint_ids,
+            ).to_dict(),
+        )
+
+    def _attach_checkpoint_verification(self, checkpoint_id: str, verification_id: str) -> None:
+        checkpoint = self.get_checkpoint(checkpoint_id)
+        verification = self.get_verification(verification_id)
+        write_json(
+            self.layout.checkpoint_path(checkpoint_id),
+            CheckpointRecord(
+                checkpoint_id=checkpoint.checkpoint_id,
+                revision_id=checkpoint.revision_id,
+                name=checkpoint.name,
+                note=checkpoint.note,
+                created_at=checkpoint.created_at,
+                safe=checkpoint.safe,
+                pinned=checkpoint.pinned,
+                approval_state=checkpoint.approval_state,
+                approval_note=checkpoint.approval_note,
+                provenance=self._provenance_with_verification(checkpoint.provenance, verification),
+                verification_id=verification_id,
+                artifact_ids=checkpoint.artifact_ids,
+            ).to_dict(),
+        )
+
     def _ensure_lineage(
         self,
         lineage_id: str,
@@ -1144,6 +1475,28 @@ class Repository:
                 ordered.append(item)
                 seen.add(item)
         return tuple(ordered)
+
+    def _provenance_with_verification(
+        self,
+        provenance: ProvenanceRecord,
+        verification: object,
+    ) -> ProvenanceRecord:
+        return ProvenanceRecord(
+            actor_role=provenance.actor_role,
+            actor_id=provenance.actor_id,
+            prompt_template=provenance.prompt_template,
+            agent_family=provenance.agent_family,
+            run_id=provenance.run_id,
+            block_id=provenance.block_id,
+            step_id=provenance.step_id,
+            lineage_id=provenance.lineage_id,
+            verification_status=verification.status,
+            verification_summary=verification.summary,
+            committed_at=provenance.committed_at,
+            origin_commit=provenance.origin_commit,
+            rewritten_from=provenance.rewritten_from,
+            promoted_from=provenance.promoted_from,
+        )
 
     def _populate_tree(
         self,

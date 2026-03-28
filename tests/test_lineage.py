@@ -43,12 +43,17 @@ def test_lineage_service_creates_switches_and_discards_lineages(tmp_path: Path) 
         title="Feature",
         description="parallel work",
     )
+    inspected = service.inspect_lineage("feature")
     listed = {lineage.lineage_id: lineage for lineage in service.list_lineages()}
 
     assert feature.base_checkpoint_id == checkpoint.checkpoint_id
     assert feature.head_revision == base_commit
     assert feature.status is LineageStatus.ACTIVE
     assert feature.owned_paths == ("feature.txt",)
+    assert inspected == feature
+    assert inspected.current_head_revision == base_commit
+    assert inspected.created_at is not None
+    assert inspected.updated_at is not None
     assert "main" in listed
     assert listed["feature"].description == "parallel work"
 
@@ -66,6 +71,7 @@ def test_lineage_service_creates_switches_and_discards_lineages(tmp_path: Path) 
     assert not reopened.layout.branch_path("feature").exists()
     with pytest.raises(ValueError, match="cannot switch to discarded lineage"):
         service.switch_lineage("feature")
+    assert tuple(lineage.lineage_id for lineage in service.list_lineages(include_inactive=False)) == ("main",)
     assert story.read_text(encoding="utf-8") == "base\n"
 
 

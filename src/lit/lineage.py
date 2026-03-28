@@ -395,6 +395,9 @@ class LineageService:
     def get_lineage(self, lineage_id: str) -> ManagedLineage:
         return load_lineage_record(self.layout, lineage_id)
 
+    def inspect_lineage(self, lineage_id: str) -> ManagedLineage:
+        return self.get_lineage(lineage_id)
+
     def create_lineage(
         self,
         lineage_id: str,

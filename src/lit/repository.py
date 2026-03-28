@@ -39,6 +39,11 @@ from lit.domain import (
 )
 from lit.index import IndexEntry, IndexState, read_index
 from lit.layout import LitLayout, ObjectKind
+from lit.lineage import (
+    list_lineage_records,
+    load_lineage_record,
+    upsert_lineage_record,
+)
 from lit.migrations import bootstrap_repository
 from lit.refs import (
     branch_name_from_ref,
@@ -1111,16 +1116,10 @@ class Repository:
             return self._finish_operation(operation, status=OperationStatus.SUCCEEDED, revision_id=target.revision_id, checkpoint_id=target.checkpoint_id, lineage_id=target.provenance.lineage_id)
 
     def list_lineages(self) -> tuple[LineageRecord, ...]:
-        return tuple(
-            LineageRecord.from_dict(read_json(path, default=None))
-            for path in sorted(self.layout.lineages.glob("*.json"))
-        )
+        return tuple(record.to_domain_record() for record in list_lineage_records(self.layout))
 
     def get_lineage(self, lineage_id: str) -> LineageRecord:
-        path = self.layout.lineage_path(lineage_id)
-        if not path.exists():
-            raise FileNotFoundError(f"lineage not found: {lineage_id}")
-        return LineageRecord.from_dict(read_json(path, default=None))
+        return load_lineage_record(self.layout, lineage_id).to_domain_record()
 
     def create_lineage(self, *, lineage_id: str, forked_from: str | None = None, title: str = "", description: str = "") -> OperationRecord:
         normalized = normalize_branch_name(lineage_id)
@@ -1144,18 +1143,14 @@ class Repository:
         with self._mutation(OperationKind.PROMOTE_LINEAGE.value, message=f"promote {lineage_id} to {destination_id}"):
             operation = self._begin_operation(OperationKind.PROMOTE_LINEAGE, message=f"promote {lineage_id} to {destination_id}", lineage_id=destination_id)
             try:
-                updated = LineageRecord(
-                    lineage_id=destination.lineage_id,
+                upsert_lineage_record(
+                    self.layout,
+                    destination.lineage_id,
                     head_revision=source.head_revision,
-                    forked_from=destination.forked_from,
                     promoted_from=lineage_id,
-                    created_at=destination.created_at,
-                    updated_at=utc_now(),
-                    title=destination.title,
-                    description=destination.description,
                     checkpoint_ids=self._append_unique(destination.checkpoint_ids, source.checkpoint_ids),
+                    mutation=self._transaction_writer(),
                 )
-                write_json(self.layout.lineage_path(destination_id), updated.to_dict(), mutation=self._transaction_writer())
                 if self.layout.branch_path(destination_id).exists():
                     write_ref(self.layout.branch_path(destination_id), source.head_revision, mutation=self._transaction_writer())
             except Exception as error:
@@ -1272,21 +1267,19 @@ class Repository:
         title: str | None = None,
         description: str | None = None,
     ) -> LineageRecord:
-        path = self.layout.lineage_path(lineage_id)
-        existing = LineageRecord.from_dict(read_json(path, default=None)) if path.exists() else LineageRecord(lineage_id=lineage_id, created_at=utc_now(), title=title or lineage_id, description=description or "")
-        updated = LineageRecord(
-            lineage_id=lineage_id,
-            head_revision=existing.head_revision if head_revision is None else head_revision,
-            forked_from=existing.forked_from or forked_from,
-            promoted_from=existing.promoted_from if promoted_from is None else promoted_from,
-            created_at=existing.created_at,
-            updated_at=utc_now(),
-            title=existing.title if title is None else title,
-            description=existing.description if description is None else description,
-            checkpoint_ids=self._append_unique(existing.checkpoint_ids, () if checkpoint_id is None else (checkpoint_id,)),
+        updated = upsert_lineage_record(
+            self.layout,
+            lineage_id,
+            head_revision=head_revision,
+            base_checkpoint_id=None,
+            forked_from=forked_from,
+            promoted_from=promoted_from,
+            checkpoint_id=checkpoint_id,
+            title=title,
+            description=description,
+            mutation=self._transaction_writer(),
         )
-        write_json(path, updated.to_dict(), mutation=self._transaction_writer())
-        return updated
+        return updated.to_domain_record()
 
     def _append_unique(self, existing: tuple[str, ...], additional: tuple[str, ...]) -> tuple[str, ...]:
         ordered = list(existing)

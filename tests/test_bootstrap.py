@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -153,12 +154,25 @@ def test_v1_contract_modules_freeze_layout_and_backend_surface(tmp_path: Path) -
         "list_lineages",
         "get_lineage",
         "create_lineage",
+        "switch_lineage",
         "promote_lineage",
         "record_verification",
         "get_verification",
         "list_artifacts",
         "get_artifact",
     } <= BackendService.__abstractmethods__
+
+
+def test_release_version_strings_match_pyproject() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    version = project["version"]
+
+    import lit
+    import lit_gui
+
+    assert version == "1.0.0"
+    assert lit.__version__ == version
+    assert lit_gui.__version__ == version
 
 
 def test_repository_branch_dag_and_operation_primitives(tmp_path: Path) -> None:

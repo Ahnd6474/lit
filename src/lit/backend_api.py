@@ -367,6 +367,10 @@ class BackendService(ABC):
         """Fork a new lineage boundary for isolated autonomous work."""
 
     @abstractmethod
+    def switch_lineage(self, root: Path, lineage_id: str) -> LineageHandle:
+        """Switch the working tree and HEAD to an active lineage."""
+
+    @abstractmethod
     def preview_lineage_promotion(self, request: PreviewPromotionRequest) -> object:
         """Preview conflicts before a lineage promotion mutates repository state."""
 
@@ -608,6 +612,10 @@ class LitBackendService(BackendService):
             lineage_id=lineage.lineage_id,
             message=request.description or request.title or f"created lineage {request.lineage_id}",
         )
+
+    def switch_lineage(self, root: Path, lineage_id: str) -> LineageHandle:
+        lineage = self._repository(root).switch_lineage(lineage_id)
+        return LineageHandle.from_managed(lineage)
 
     def preview_lineage_promotion(self, request: PreviewPromotionRequest) -> object:
         return self._repository(request.root).preview_promotion_conflicts(

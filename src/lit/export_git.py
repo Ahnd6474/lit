@@ -162,6 +162,24 @@ def _collect_revisions(
     refs: tuple[GitExportRef, ...],
     checkpoints: tuple[object, ...],
 ) -> tuple[object, ...]:
+    candidates = _revision_candidates(
+        repo,
+        start_revision=start_revision,
+        lineage_id=lineage_id,
+        refs=refs,
+        checkpoints=checkpoints,
+    )
+    return _materialize_revisions(repo, candidates)
+
+
+def _revision_candidates(
+    repo: Repository,
+    *,
+    start_revision: str | None,
+    lineage_id: str | None,
+    refs: tuple[GitExportRef, ...],
+    checkpoints: tuple[object, ...],
+) -> tuple[str, ...]:
     candidates: list[str] = []
     if start_revision is not None:
         resolved = repo.resolve_revision(start_revision)
@@ -184,7 +202,10 @@ def _collect_revisions(
         current = repo.current_commit_id()
         if current is not None and current not in candidates:
             candidates.append(current)
+    return tuple(candidates)
 
+
+def _materialize_revisions(repo: Repository, candidates: tuple[str, ...]) -> tuple[object, ...]:
     ordered: list[object] = []
     seen: set[str] = set()
     for candidate in candidates:

@@ -98,6 +98,22 @@ def test_cli_release_surface_workflow_covers_checkpoint_verify_lineage_artifact_
     )
     assert lineage_payload["lineage"]["lineage_id"] == "feature-a"
 
+    switch_payload = _json_output(
+        _run_lit(
+            repo_root,
+            "lineage",
+            "switch",
+            "feature-a",
+            "--json",
+            env=env,
+        )
+    )
+    assert switch_payload["lineage_id"] == "feature-a"
+    assert Repository.open(repo_root).current_branch_name() == "feature-a"
+
+    _run_lit(repo_root, "lineage", "switch", "main", env=env)
+    assert Repository.open(repo_root).current_branch_name() == "main"
+
     preview_payload = _json_output(
         _run_lit(
             repo_root,

@@ -27,87 +27,22 @@ class CommitMetadata:
 
     def to_dict(self) -> dict[str, object]:
         data: dict[str, object] = {"author": self.author}
-        if self.committed_at is not None:
-            data["committed_at"] = self.committed_at
-        if self.actor_role is not None:
-            data["actor_role"] = self.actor_role
-        if self.actor_id is not None:
-            data["actor_id"] = self.actor_id
-        if self.prompt_template is not None:
-            data["prompt_template"] = self.prompt_template
-        if self.agent_family is not None:
-            data["agent_family"] = self.agent_family
-        if self.run_id is not None:
-            data["run_id"] = self.run_id
-        if self.block_id is not None:
-            data["block_id"] = self.block_id
-        if self.step_id is not None:
-            data["step_id"] = self.step_id
-        if self.lineage_id is not None:
-            data["lineage_id"] = self.lineage_id
-        if self.verification_status is not None:
-            data["verification_status"] = self.verification_status
-        if self.verification_summary is not None:
-            data["verification_summary"] = self.verification_summary
-        if self.origin_commit is not None:
-            data["origin_commit"] = self.origin_commit
-        if self.rewritten_from is not None:
-            data["rewritten_from"] = self.rewritten_from
-        if self.promoted_from is not None:
-            data["promoted_from"] = self.promoted_from
+        for key in _OPTIONAL_METADATA_FIELDS:
+            value = getattr(self, key)
+            if value is not None:
+                data[key] = value
         return data
 
     @classmethod
     def from_dict(cls, data: dict[str, object] | None) -> "CommitMetadata":
         if not data:
             return cls()
-        return cls(
-            author=str(data.get("author", "lit")),
-            committed_at=(
-                None if data.get("committed_at") is None else str(data["committed_at"])
-            ),
-            actor_role=(
-                None if data.get("actor_role") is None else str(data["actor_role"])
-            ),
-            actor_id=(
-                None if data.get("actor_id") is None else str(data["actor_id"])
-            ),
-            prompt_template=(
-                None if data.get("prompt_template") is None else str(data["prompt_template"])
-            ),
-            agent_family=(
-                None if data.get("agent_family") is None else str(data["agent_family"])
-            ),
-            run_id=None if data.get("run_id") is None else str(data["run_id"]),
-            block_id=None if data.get("block_id") is None else str(data["block_id"]),
-            step_id=None if data.get("step_id") is None else str(data["step_id"]),
-            lineage_id=(
-                None if data.get("lineage_id") is None else str(data["lineage_id"])
-            ),
-            verification_status=(
-                None
-                if data.get("verification_status") is None
-                else str(data["verification_status"])
-            ),
-            verification_summary=(
-                None
-                if data.get("verification_summary") is None
-                else str(data["verification_summary"])
-            ),
-            origin_commit=(
-                None if data.get("origin_commit") is None else str(data["origin_commit"])
-            ),
-            rewritten_from=(
-                None
-                if data.get("rewritten_from") is None
-                else str(data["rewritten_from"])
-            ),
-            promoted_from=(
-                None
-                if data.get("promoted_from") is None
-                else str(data["promoted_from"])
-            ),
+        metadata = {"author": str(data.get("author", "lit"))}
+        metadata.update(
+            (key, None if data.get(key) is None else str(data[key]))
+            for key in _OPTIONAL_METADATA_FIELDS
         )
+        return cls(**metadata)
 
     @classmethod
     def from_provenance(cls, provenance: ProvenanceRecord) -> "CommitMetadata":
@@ -215,3 +150,21 @@ def deserialize_commit(payload: bytes) -> CommitRecord:
 
 def commit_id(record: CommitRecord) -> str:
     return hash_bytes(serialize_commit(record))
+
+
+_OPTIONAL_METADATA_FIELDS = (
+    "committed_at",
+    "actor_role",
+    "actor_id",
+    "prompt_template",
+    "agent_family",
+    "run_id",
+    "block_id",
+    "step_id",
+    "lineage_id",
+    "verification_status",
+    "verification_summary",
+    "origin_commit",
+    "rewritten_from",
+    "promoted_from",
+)

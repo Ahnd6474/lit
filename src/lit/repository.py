@@ -1018,6 +1018,11 @@ class Repository:
             description=description,
         )
 
+    def switch_lineage(self, lineage_id: str) -> object:
+        from lit.lineage import LineageService
+
+        return LineageService.open(self.root).switch_lineage(lineage_id)
+
     def preview_promotion_conflicts(
         self,
         lineage_id: str,

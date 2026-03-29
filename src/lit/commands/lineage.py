@@ -53,6 +53,14 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     add_json_flag(create_parser)
     create_parser.set_defaults(handler=run_create)
 
+    switch_parser = lineage_subparsers.add_parser(
+        "switch",
+        help="Switch the working tree to an active lineage.",
+    )
+    switch_parser.add_argument("lineage_id", help="Lineage identifier.")
+    add_json_flag(switch_parser)
+    switch_parser.set_defaults(handler=run_switch)
+
     promote_parser = lineage_subparsers.add_parser(
         "promote",
         help="Preview or perform a lineage promotion into another lineage.",
@@ -121,6 +129,12 @@ def run_create(args: argparse.Namespace) -> int:
             f"at {short_id(payload['lineage'].head_revision)}"
         ),
     )
+    return 0
+
+
+def run_switch(args: argparse.Namespace) -> int:
+    lineage = backend().switch_lineage(current_repository().root, args.lineage_id)
+    emit(args, lineage, lambda payload: f"switched to lineage {payload.lineage_id}")
     return 0
 
 

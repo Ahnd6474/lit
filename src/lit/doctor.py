@@ -51,97 +51,166 @@ def run_doctor(root: str | Path, *, repair: bool = False) -> DoctorReport:
     repository_root = Path(root).expanduser().resolve()
     dot_lit = repository_root / ".lit"
     if not dot_lit.is_dir():
-        return DoctorReport(
-            repository_root=repository_root,
-            is_initialized=False,
-            findings=(
-                DoctorFinding(
-                    severity="error",
-                    code="repository_missing",
-                    message=f"lit repository metadata not found at {dot_lit}",
-                    path=".lit",
-                ),
-            ),
-        )
+        return _missing_repository_report(repository_root, dot_lit)
 
     repo = Repository.open(repository_root)
     recovered_operations = recover_pending_transactions(repo.layout) if repair else ()
     findings: list[DoctorFinding] = []
 
+    _append_transaction_findings(findings, repo, repository_root, recovered_operations)
+
+    lock_finding = _lock_finding(repo, repository_root)
+    if lock_finding is not None:
+        findings.append(lock_finding)
+
+    current_branch, head_revision = _append_head_findings(findings, repo, repository_root)
+
+    revision_ids = tuple(path.stem for path in sorted(repo.layout.revisions.glob("*.json")))
+    checkpoints = repo.list_checkpoints()
+    lineages = repo.list_managed_lineages()
+    verifications = repo.list_verifications()
+    artifacts = repo.list_artifact_manifests()
+
+    _append_revision_findings(findings, repo, repository_root, revision_ids)
+    _append_checkpoint_findings(findings, repo, repository_root, checkpoints)
+    _append_lineage_findings(findings, repo, repository_root, lineages)
+    _append_artifact_findings(findings, repository_root, artifacts)
+
+    stats = DoctorStats(
+        revisions=len(revision_ids),
+        checkpoints=len(checkpoints),
+        lineages=len(lineages),
+        verifications=len(verifications),
+        artifacts=len(artifacts),
+        operations=sum(1 for _ in repo.layout.operations.glob("*.json")),
+    )
+    return DoctorReport(
+        repository_root=repository_root,
+        is_initialized=True,
+        current_branch=current_branch,
+        head_revision=head_revision,
+        latest_safe_checkpoint_id=_latest_safe_checkpoint_id(checkpoints, lineage_id=current_branch)
+        or _latest_safe_checkpoint_id(checkpoints),
+        recovered_operations=recovered_operations,
+        findings=tuple(findings),
+        stats=stats,
+    )
+
+
+def _missing_repository_report(repository_root: Path, dot_lit: Path) -> DoctorReport:
+    return DoctorReport(
+        repository_root=repository_root,
+        is_initialized=False,
+        findings=(
+            DoctorFinding(
+                severity="error",
+                code="repository_missing",
+                message=f"lit repository metadata not found at {dot_lit}",
+                path=".lit",
+            ),
+        ),
+    )
+
+
+def _append_transaction_findings(
+    findings: list[DoctorFinding],
+    repo: Repository,
+    repository_root: Path,
+    recovered_operations: tuple[str, ...],
+) -> None:
+    journals_path = _repository_relative_path(repository_root, repo.layout.journals)
     if recovered_operations:
         findings.append(
             DoctorFinding(
                 severity="warning",
                 code="transactions_recovered",
                 message=f"recovered {len(recovered_operations)} unfinished transaction(s)",
-                path=repo.layout.journals.relative_to(repository_root).as_posix(),
+                path=journals_path,
             )
         )
-    elif _has_pending_journals(repo):
+        return
+    if _has_pending_journals(repo):
         findings.append(
             DoctorFinding(
                 severity="warning",
                 code="unfinished_transactions",
                 message="unfinished repository transactions are waiting for recovery",
-                path=repo.layout.journals.relative_to(repository_root).as_posix(),
+                path=journals_path,
             )
         )
 
-    lock_finding = _lock_finding(repo, repository_root)
-    if lock_finding is not None:
-        findings.append(lock_finding)
 
-    head_target = repo.current_head_target()
-    if head_target is None:
+def _append_head_findings(
+    findings: list[DoctorFinding],
+    repo: Repository,
+    repository_root: Path,
+) -> tuple[str | None, str | None]:
+    if repo.current_head_target() is None:
         findings.append(
             DoctorFinding(
                 severity="warning",
                 code="head_unset",
                 message="HEAD is unset",
-                path=repo.layout.head.relative_to(repository_root).as_posix(),
+                path=_repository_relative_path(repository_root, repo.layout.head),
             )
         )
 
     current_branch = repo.current_branch_name()
     head_revision = repo.current_commit_id()
-    if current_branch is not None and not repo.layout.branch_path(current_branch).exists():
+    if current_branch is not None:
+        branch_path = repo.layout.branch_path(current_branch)
+        if not branch_path.exists():
+            findings.append(
+                DoctorFinding(
+                    severity="error",
+                    code="branch_ref_missing",
+                    message=f"current branch ref is missing for {current_branch}",
+                    path=_repository_relative_path(repository_root, branch_path),
+                )
+            )
+    return current_branch, head_revision
+
+
+def _append_revision_findings(
+    findings: list[DoctorFinding],
+    repo: Repository,
+    repository_root: Path,
+    revision_ids: tuple[str, ...],
+) -> None:
+    for revision_id in revision_ids:
+        revision = repo.get_revision(revision_id)
+        if not _verification_missing(repo, revision.verification_id):
+            continue
+        revision_path = repo.layout.revision_path(revision.revision_id or "")
         findings.append(
             DoctorFinding(
-                severity="error",
-                code="branch_ref_missing",
-                message=f"current branch ref is missing for {current_branch}",
-                path=repo.layout.branch_path(current_branch).relative_to(repository_root).as_posix(),
+                severity="warning",
+                code="revision_verification_missing",
+                message=(
+                    f"revision {revision.revision_id} links missing verification "
+                    f"{revision.verification_id}"
+                ),
+                path=_repository_relative_path(repository_root, revision_path),
             )
         )
 
-    revision_ids = tuple(path.stem for path in sorted(repo.layout.revisions.glob("*.json")))
-    for revision_id in revision_ids:
-        revision = repo.get_revision(revision_id)
-        if revision.verification_id is not None:
-            try:
-                repo.get_verification(revision.verification_id)
-            except FileNotFoundError:
-                findings.append(
-                    DoctorFinding(
-                        severity="warning",
-                        code="revision_verification_missing",
-                        message=f"revision {revision.revision_id} links missing verification {revision.verification_id}",
-                        path=repo.layout.revision_path(revision.revision_id or "").relative_to(
-                            repository_root
-                        ).as_posix(),
-                    )
-                )
 
-    for checkpoint in repo.list_checkpoints():
+def _append_checkpoint_findings(
+    findings: list[DoctorFinding],
+    repo: Repository,
+    repository_root: Path,
+    checkpoints: tuple[object, ...],
+) -> None:
+    for checkpoint in checkpoints:
+        checkpoint_path = repo.layout.checkpoint_path(checkpoint.checkpoint_id or "")
+        path = _repository_relative_path(repository_root, checkpoint_path)
         if checkpoint.revision_id is None:
             findings.append(
                 DoctorFinding(
                     severity="error",
                     code="checkpoint_without_revision",
                     message=f"checkpoint {checkpoint.checkpoint_id} has no revision",
-                    path=repo.layout.checkpoint_path(checkpoint.checkpoint_id or "").relative_to(
-                        repository_root
-                    ).as_posix(),
+                    path=path,
                 )
             )
             continue
@@ -156,30 +225,32 @@ def run_doctor(root: str | Path, *, repair: bool = False) -> DoctorReport:
                         f"checkpoint {checkpoint.checkpoint_id} points to missing revision "
                         f"{checkpoint.revision_id}"
                     ),
-                    path=repo.layout.checkpoint_path(checkpoint.checkpoint_id or "").relative_to(
-                        repository_root
-                    ).as_posix(),
+                    path=path,
                 )
             )
-        if checkpoint.verification_id is not None:
-            try:
-                repo.get_verification(checkpoint.verification_id)
-            except FileNotFoundError:
-                findings.append(
-                    DoctorFinding(
-                        severity="warning",
-                        code="checkpoint_verification_missing",
-                        message=(
-                            f"checkpoint {checkpoint.checkpoint_id} links missing verification "
-                            f"{checkpoint.verification_id}"
-                        ),
-                        path=repo.layout.checkpoint_path(checkpoint.checkpoint_id or "").relative_to(
-                            repository_root
-                        ).as_posix(),
-                    )
+        if _verification_missing(repo, checkpoint.verification_id):
+            findings.append(
+                DoctorFinding(
+                    severity="warning",
+                    code="checkpoint_verification_missing",
+                    message=(
+                        f"checkpoint {checkpoint.checkpoint_id} links missing verification "
+                        f"{checkpoint.verification_id}"
+                    ),
+                    path=path,
                 )
+            )
 
-    for lineage in repo.list_managed_lineages():
+
+def _append_lineage_findings(
+    findings: list[DoctorFinding],
+    repo: Repository,
+    repository_root: Path,
+    lineages: tuple[object, ...],
+) -> None:
+    for lineage in lineages:
+        lineage_path = repo.layout.lineage_path(lineage.lineage_id)
+        path = _repository_relative_path(repository_root, lineage_path)
         if lineage.head_revision is not None:
             try:
                 repo.get_revision(lineage.head_revision)
@@ -192,9 +263,7 @@ def run_doctor(root: str | Path, *, repair: bool = False) -> DoctorReport:
                             f"lineage {lineage.lineage_id} points to missing head revision "
                             f"{lineage.head_revision}"
                         ),
-                        path=repo.layout.lineage_path(lineage.lineage_id).relative_to(
-                            repository_root
-                        ).as_posix(),
+                        path=path,
                     )
                 )
         if lineage.base_checkpoint_id is not None:
@@ -209,43 +278,56 @@ def run_doctor(root: str | Path, *, repair: bool = False) -> DoctorReport:
                             f"lineage {lineage.lineage_id} points to missing base checkpoint "
                             f"{lineage.base_checkpoint_id}"
                         ),
-                        path=repo.layout.lineage_path(lineage.lineage_id).relative_to(
-                            repository_root
-                        ).as_posix(),
+                        path=path,
                     )
                 )
 
-    for artifact in repo.list_artifact_manifests():
-        payload_path = repository_root / artifact.relative_path
-        if artifact.relative_path and not payload_path.exists():
+
+def _append_artifact_findings(
+    findings: list[DoctorFinding],
+    repository_root: Path,
+    artifacts: tuple[object, ...],
+) -> None:
+    for artifact in artifacts:
+        if artifact.relative_path and not (repository_root / artifact.relative_path).exists():
             findings.append(
                 DoctorFinding(
                     severity="warning",
                     code="artifact_payload_missing",
-                    message=f"artifact {artifact.artifact_id} payload is missing from {artifact.relative_path}",
+                    message=(
+                        f"artifact {artifact.artifact_id} payload is missing from "
+                        f"{artifact.relative_path}"
+                    ),
                     path=artifact.relative_path,
                 )
             )
 
-    stats = DoctorStats(
-        revisions=len(revision_ids),
-        checkpoints=len(repo.list_checkpoints()),
-        lineages=len(repo.list_managed_lineages()),
-        verifications=len(repo.list_verifications()),
-        artifacts=len(repo.list_artifact_manifests()),
-        operations=len(tuple(repo.layout.operations.glob("*.json"))),
-    )
-    return DoctorReport(
-        repository_root=repository_root,
-        is_initialized=True,
-        current_branch=current_branch,
-        head_revision=head_revision,
-        latest_safe_checkpoint_id=repo.latest_safe_checkpoint_id(lineage_id=current_branch)
-        or repo.latest_safe_checkpoint_id(),
-        recovered_operations=recovered_operations,
-        findings=tuple(findings),
-        stats=stats,
-    )
+
+def _latest_safe_checkpoint_id(
+    checkpoints: tuple[object, ...],
+    *,
+    lineage_id: str | None = None,
+) -> str | None:
+    safe = [
+        checkpoint
+        for checkpoint in checkpoints
+        if checkpoint.safe and (lineage_id is None or checkpoint.provenance.lineage_id == lineage_id)
+    ]
+    return None if not safe else safe[-1].checkpoint_id
+
+
+def _verification_missing(repo: Repository, verification_id: str | None) -> bool:
+    if verification_id is None:
+        return False
+    try:
+        repo.get_verification(verification_id)
+    except FileNotFoundError:
+        return True
+    return False
+
+
+def _repository_relative_path(repository_root: Path, path: Path) -> str:
+    return path.relative_to(repository_root).as_posix()
 
 
 def _has_pending_journals(repo: Repository) -> bool:

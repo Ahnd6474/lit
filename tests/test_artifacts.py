@@ -22,8 +22,7 @@ def test_artifact_store_uses_configurable_global_home_and_deduplicates_payloads(
 
     assert default_artifact_home() == configured_home.resolve()
 
-    repo_root = tmp_path / "repo"
-    Repository.create(repo_root)
+    repo_root = _create_repository(tmp_path)
     store = ArtifactStore()
     revision_link = ArtifactLink.revision("rev-1")
     checkpoint_link = ArtifactLink.checkpoint("cp-1")
@@ -55,21 +54,19 @@ def test_artifact_store_uses_configurable_global_home_and_deduplicates_payloads(
     assert object_path.is_file()
     assert len(store.iter_objects()) == 1
 
-    manifest_path = repo_root / ".lit" / "v1" / "artifacts" / (first.artifact_id or "") / "artifact.json"
-    persisted = ArtifactManifest.from_dict(read_json(manifest_path, default=None))
+    manifest_payload = _read_artifact_manifest_payload(repo_root, first.artifact_id or "")
+    persisted = ArtifactManifest.from_dict(manifest_payload)
     assert persisted.pinned is True
     assert [link.owner_kind for link in persisted.all_links] == [
         "revision",
         "checkpoint",
         "lineage",
     ]
-    assert ArtifactRecord.from_dict(read_json(manifest_path, default=None)).digest == first.digest
+    assert ArtifactRecord.from_dict(manifest_payload).digest == first.digest
 
 
 def test_artifact_store_supports_resumable_writes_and_link_updates(tmp_path: Path) -> None:
-    repo_root = tmp_path / "repo"
-    Repository.create(repo_root)
-    store = ArtifactStore(tmp_path / "global-home")
+    repo_root, store = _create_repository_with_store(tmp_path)
 
     session = store.begin_write(
         kind="checkpoint-bundle",
@@ -105,9 +102,7 @@ def test_artifact_store_supports_resumable_writes_and_link_updates(tmp_path: Pat
 def test_artifact_store_exposes_explicit_commit_checkpoint_and_lineage_link_helpers(
     tmp_path: Path,
 ) -> None:
-    repo_root = tmp_path / "repo"
-    Repository.create(repo_root)
-    store = ArtifactStore(tmp_path / "global-home")
+    repo_root, store = _create_repository_with_store(tmp_path)
 
     manifest = store.store_bytes(
         b"bundle-bytes",
@@ -163,9 +158,7 @@ def test_artifact_store_exposes_explicit_commit_checkpoint_and_lineage_link_help
 
 
 def test_artifact_store_reports_usage_and_collects_unlinked_objects(tmp_path: Path) -> None:
-    repo_root = tmp_path / "repo"
-    Repository.create(repo_root)
-    store = ArtifactStore(tmp_path / "global-home")
+    repo_root, store = _create_repository_with_store(tmp_path)
     store.set_quota(20)
 
     pinned = store.store_bytes(
@@ -216,3 +209,19 @@ def test_artifact_store_reports_usage_and_collects_unlinked_objects(tmp_path: Pa
     assert not store.has_object(orphan.content_address or "")
     assert store.has_object(pinned.content_address or "")
     assert store.has_object(linked.content_address or "")
+
+
+def _create_repository(tmp_path: Path) -> Path:
+    repo_root = tmp_path / "repo"
+    Repository.create(repo_root)
+    return repo_root
+
+
+def _create_repository_with_store(tmp_path: Path) -> tuple[Path, ArtifactStore]:
+    repo_root = _create_repository(tmp_path)
+    return repo_root, ArtifactStore(tmp_path / "global-home")
+
+
+def _read_artifact_manifest_payload(repo_root: Path, artifact_id: str) -> dict[str, object]:
+    manifest_path = repo_root / ".lit" / "v1" / "artifacts" / artifact_id / "artifact.json"
+    return read_json(manifest_path, default=None)

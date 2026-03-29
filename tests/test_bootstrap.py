@@ -234,35 +234,34 @@ def test_repository_checkout_switches_branches_and_detaches_head(tmp_path: Path)
     repo = Repository.create(tmp_path)
 
     nested = tmp_path / "docs" / "guide.txt"
+    main_only = tmp_path / "docs" / "main-only.txt"
     nested.parent.mkdir(parents=True)
     nested.write_text("base\n", encoding="utf-8")
     base_commit = _commit_path(repo, "docs")
     repo.create_branch("feature", start_point=base_commit)
 
     nested.write_text("main\n", encoding="utf-8")
-    (tmp_path / "docs" / "main-only.txt").write_text("present\n", encoding="utf-8")
+    main_only.write_text("present\n", encoding="utf-8")
     main_commit = _commit_path(repo, "docs")
 
     checkout = repo.checkout("feature")
     assert checkout.branch_name == "feature"
-    assert repo.current_branch_name() == "feature"
-    assert repo.current_commit_id() == base_commit
+    assert checkout.commit_id == base_commit
     assert repo.layout.head.read_text(encoding="utf-8") == "ref: refs/heads/feature\n"
     assert nested.read_text(encoding="utf-8") == "base\n"
-    assert not (tmp_path / "docs" / "main-only.txt").exists()
+    assert not main_only.exists()
 
-    (tmp_path / "docs" / "main-only.txt").write_text("scratch\n", encoding="utf-8")
+    main_only.write_text("scratch\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="overwrite untracked paths"):
         repo.checkout("main")
-    (tmp_path / "docs" / "main-only.txt").unlink()
+    main_only.unlink()
 
     detached = repo.checkout(main_commit)
     assert detached.detached is True
-    assert repo.current_branch_name() is None
-    assert repo.current_commit_id() == main_commit
+    assert detached.commit_id == main_commit
     assert repo.layout.head.read_text(encoding="utf-8") == f"{main_commit}\n"
     assert nested.read_text(encoding="utf-8") == "main\n"
-    assert (tmp_path / "docs" / "main-only.txt").read_text(encoding="utf-8") == "present\n"
+    assert main_only.read_text(encoding="utf-8") == "present\n"
 
     nested.write_text("dirty\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="clean index and tracked working tree"):
@@ -271,8 +270,7 @@ def test_repository_checkout_switches_branches_and_detaches_head(tmp_path: Path)
 
     switched_back = repo.checkout("main")
     assert switched_back.branch_name == "main"
-    assert repo.current_branch_name() == "main"
-    assert repo.current_commit_id() == main_commit
+    assert switched_back.commit_id == main_commit
     assert repo.layout.head.read_text(encoding="utf-8") == "ref: refs/heads/main\n"
 
 

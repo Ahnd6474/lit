@@ -9,3 +9,9 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+
+_tmp_*/
+
+.parallel_runs/
+.lineages/
+jakal-flow-logs/

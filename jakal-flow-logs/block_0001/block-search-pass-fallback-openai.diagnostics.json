@@ -1,0 +1,16 @@
+{
+  "attempt_count": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "duration_seconds": 2600.407,
+      "last_message_excerpt": "Added the v1 release surface on top of the shared backend. The CLI now exposes `checkpoint`, `rollback`, `verify`, `lineage`, `artifact`, `gc`, `doctor`, and `export` with human output plus `--json`, wired through [src/lit/cli.py](C:/Users/ahnd6/.jakal-flow-workspace/projects/c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc/.lineages/ln5/repo/src/lit/cli.py), [src/lit/commands/__init__.py](C:/Users/ahnd6/.jakal-flow-workspace/projects/c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc/.lineag...",
+      "returncode": 0,
+      "stderr_excerpt": "2026-03-29T11:12:38.633271Z ERROR codex_core::tools::router: error=Exit code: 1\nWall time: 0.7 seconds\nOutput:\nGet-Content : Cannot find path 'C:\\Users\\ahnd6\\.jakal-flow-workspace\\projects\\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\\.lineages\\ln5\\repo\\src\\lit\\commands\\gc.py' because i\r\nt does not exist.\r\nAt line:2 char:1\r\n+ Get-Content src/lit/commands/gc.py\r\n+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : ObjectNotFound: (C:\\Users\\ahnd6\\...\\commands\\gc.py:String) [G...",
+      "stdout_excerpt": "{\"type\":\"thread.started\",\"thread_id\":\"019d394a-8fb5-7d93-90a4-310dcb7a20dc\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"agent_message\",\"text\":\"I\u2019m inspecting the managed repo and the release-surface files first so I can keep the change set inside the current scope boundary and match the existing CLI/UI/backend structure.\"}}\n{\"type\":\"item.started\",\"item\":{\"id\":\"item_1\",\"type\":\"command_execution\",\"command\":\"\\\"C:\\\\\\\\WINDOWS\\\\\\\\System32\\\\\\\\WindowsPowerShell\\\\\\\\...",
+      "unexpected_token_detected": false
+    }
+  ],
+  "recovered_after_retry": false,
+  "unexpected_token_detected": false
+}

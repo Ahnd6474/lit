@@ -1,0 +1,23 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.0.2, pluggy-1.6.0
+rootdir: C:\Users\ahnd6\.jakal-flow-workspace\projects\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\.lineages\ln5\repo
+configfile: pyproject.toml
+testpaths: tests
+collected 59 items
+
+tests\gui\backend\test_session.py ......                                 [ 10%]
+tests\gui\views\test_branches_operations.py .....                        [ 18%]
+tests\gui\views\test_changes_history.py ..                               [ 22%]
+tests\gui\views\test_home_files.py ..                                    [ 25%]
+tests\gui\views\test_release_surfaces.py .                               [ 27%]
+tests\test_artifacts.py ....                                             [ 33%]
+tests\test_backend_integration.py ..                                     [ 37%]
+tests\test_bootstrap.py ...................                              [ 69%]
+tests\test_cli_end_to_end.py .                                           [ 71%]
+tests\test_git_export.py .                                               [ 72%]
+tests\test_lineage.py ......                                             [ 83%]
+tests\test_lit_gui_bootstrap.py ....                                     [ 89%]
+tests\test_performance_smoke.py .                                        [ 91%]
+tests\test_verification.py .....                                         [100%]
+
+============================= 59 passed in 40.65s =============================

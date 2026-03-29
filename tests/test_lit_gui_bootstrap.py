@@ -13,11 +13,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 
-def test_pyproject_declares_lit_gui_entrypoint_and_pyside6_dependency() -> None:
+def test_pyproject_declares_lit_gui_entrypoint_and_optional_pyside6_extra() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
 
     assert project["scripts"]["lit-gui"] == "lit_gui.app:main"
-    assert any(dependency.startswith("PySide6") for dependency in project["dependencies"])
+    assert project["optional-dependencies"]["gui"] == ["PySide6>=6.8"]
+    assert project["dependencies"] == []
 
 
 def test_gui_contracts_are_immutable_and_route_all_views() -> None:

@@ -1,22 +1,22 @@
 # lit
 
-`lit` means "local git." It is a lightweight, local-only version control prototype for one computer.
+`lit` is a local execution VCS for autonomous coding workflows on one machine. It is local-only and offline-first, but it is not a local Git clone.
 
-`lit` is useful when you want Git-like checkpoints without any server, account, remote, or network dependency. It works fully offline and focuses on small, practical local workflows instead of collaboration features.
+The v1 product is aimed at long-running local agent work and the future Jakal Flow repository backend. Its core surfaces are safe checkpoints, complete rollback, structured provenance, verification-aware history, lineage isolation, local artifact management, an installable CLI, and a desktop UI.
 
 ## What lit Does
 
-- Initializes a repository inside any local folder.
+- Initializes a repository inside any local folder with `lit init`.
 - Stages files and directories with `lit add`.
-- Creates local commits with `lit commit -m`.
-- Shows local history with `lit log`.
-- Reports staged, modified, deleted, and untracked files with `lit status`.
-- Shows working tree diffs against the current commit with `lit diff`.
-- Restores tracked files from a revision with `lit restore`.
-- Switches branches or detaches `HEAD` with `lit checkout`.
-- Creates and lists local branches with `lit branch`.
-- Merges another local branch or commit with `lit merge`.
-- Rebases the current branch onto another local branch or commit with `lit rebase`.
+- Creates local revisions with `lit commit -m`.
+- Creates safe checkpoints with `lit checkpoint create`.
+- Rolls back to the latest safe checkpoint or a selected checkpoint with `lit rollback`.
+- Records or replays verification with `lit verify`.
+- Isolates parallel local work with `lit lineage`.
+- Tracks local artifact manifests, usage, and garbage collection with `lit artifact` and `lit gc`.
+- Inspects repository health with `lit doctor`.
+- Builds a Git-facing export plan with `lit export`.
+- Still supports familiar local `lit branch`, `lit checkout`, `lit merge`, and `lit rebase` workflows.
 
 ## Local-Only Design
 
@@ -25,46 +25,28 @@
 - No remote repositories
 - No `push`, `pull`, `fetch`, or `clone`
 - No accounts, login, sync, or cloud service
-- No collaboration workflow
+- No team collaboration workflow
 - No background daemon or server
 
-If you need multi-machine sync or team collaboration, use Git instead.
+If you need multi-machine sync or shared collaboration, use Git instead.
 
 ## Installation
 
 `lit` targets Python 3.12+.
 
-From the repository root:
+Base CLI install:
 
 ```bash
 python -m pip install -e .
 ```
 
-That installs the `lit` console command. During development, you can also run commands as `python -m lit ...` after installation.
-
-## Desktop GUI MVP
-
-After `python -m pip install -e .`, launch the desktop app with either command:
+Optional desktop GUI install:
 
 ```bash
-lit-gui
-# or
-python -m lit_gui.app
+python -m pip install -e .[gui]
 ```
 
-Local GUI smoke test:
-
-1. Open or initialize a folder from Home.
-2. Use Changes to stage files and create a commit.
-3. Use History to inspect commit metadata and per-file diffs.
-4. Use Branches to create a branch, checkout another branch or commit, restore a path, and start a merge or rebase.
-5. If merge or rebase stops with conflicts, use the sidebar and right detail panel to review the conflicted paths and use the Branches abort action if you want to roll back the operation.
-
-To verify the current repository locally, run:
-
-```bash
-python -m pytest
-```
+That installs the `lit` console command. The GUI entrypoint is `lit-gui` when the optional GUI dependency is installed.
 
 ## Quick Start
 
@@ -75,100 +57,89 @@ lit init
 printf "hello\n" > note.txt
 lit add note.txt
 lit commit -m "Create first checkpoint"
+lit checkpoint create --name safe-start
 lit status
 lit log
+lit doctor
 ```
 
-To open the static local website, open `website/index.html` in a browser.
+## Release Surface
 
-## Command Overview
-
-| Command | Purpose |
-| --- | --- |
-| `lit init [path]` | Create a `.lit` repository. |
-| `lit add <paths...>` | Stage files or directories. |
-| `lit commit -m "message"` | Write the staged snapshot as a commit. |
-| `lit status` | Show staged, modified, deleted, and untracked files. |
-| `lit diff` | Show the working tree diff against the current commit. |
-| `lit log` | Show first-parent commit history from `HEAD`. |
-| `lit restore [paths...] --source <rev>` | Restore tracked files from a revision without moving `HEAD`. |
-| `lit checkout <branch-or-commit>` | Switch branches or detach `HEAD` at a commit. |
-| `lit branch [name] [--start-point <rev>]` | List branches or create a new branch. |
-| `lit merge <rev>` | Merge another local revision into the current branch. |
-| `lit merge --abort` | Clear merge state and restore the pre-merge tree. |
-| `lit rebase <rev>` | Rebase the current branch onto another local revision. |
-| `lit rebase --abort` | Clear rebase state and restore the original branch tip. |
-
-## Example Workflows
-
-### Basic Checkpointing
+### CLI
 
 ```bash
-lit init
-lit add src
-lit commit -m "Save working version"
-lit status
-lit diff
-lit log
+lit checkpoint list
+lit rollback
+lit verify status
+lit lineage list
+lit artifact usage
+lit gc --dry-run
+lit export --json
 ```
 
-### Branching and Merge
+Most inspection workflows support `--json` for machine-readable output.
+
+### Desktop GUI
+
+After `python -m pip install -e .[gui]`, launch the desktop app with either command:
 
 ```bash
-lit branch feature
-lit checkout feature
-lit add src
-lit commit -m "Work on feature"
-lit checkout main
-lit merge feature
+lit-gui
+# or
+python -m lit_gui.app
 ```
 
-If both sides edit the same tracked lines, `lit merge` writes conflict markers into the file and stores merge state. You can inspect the conflict, fix the file manually, or abort with `lit merge --abort`.
+The desktop shell uses the same backend records as the CLI and exposes:
 
-### Rebase
+- checkpoint timeline and rollback anchors
+- commit provenance and verification state
+- lineage state and promotion preview
+- conflict review for merge and rebase
+- artifact usage and repository health
 
-```bash
-lit checkout feature
-lit rebase main
-```
+## Git Bridge, Not Git Parity
 
-`lit rebase` replays the current branch's local first-parent commits onto another local revision. On conflict, it writes conflict markers and stores rebase state. You can clean up manually or abort with `lit rebase --abort`.
-
-### Restore and Checkout
-
-```bash
-lit restore docs --source HEAD
-lit checkout main
-lit checkout <commit-id>
-```
-
-Use `restore` when you want files back from a revision without moving `HEAD`. Use `checkout` when you want to move `HEAD` to a branch or commit and rewrite the working tree.
-
-## Git Similarities and Differences
+`lit` keeps some Git-like commands for familiarity, but Git parity is not the goal.
 
 Similar to Git:
 
-- Snapshot-based local commits
-- Index/staging area before commit
-- Branch, merge, checkout, and rebase workflows
-- Detached `HEAD` when checking out a commit directly
+- snapshot-based local commits
+- an index/staging area before commit
+- local branch, merge, checkout, and rebase workflows
+- detached `HEAD` when checking out a commit directly
 
 Different from Git:
 
-- Only local workflows are supported
-- No remotes and no network commands
-- Simpler merge and rebase behavior
-- Smaller command surface
-- Designed for one machine, not team collaboration
+- `lit` centers safe checkpoints, rollback, provenance, verification, and lineage isolation
+- `lit export` produces a Git-facing plan; it does not turn `lit` into Git
+- there are no remotes and no `push`, `pull`, `fetch`, or `clone`
+- conflict handling is intentionally local and explicit
+
+## Jakal Flow Path
+
+`lit` is intended to be a credible future backend for Jakal Flow:
+
+- planner and executor runs can record lineage, block, step, and run provenance
+- verification results are attached to revision and checkpoint boundaries
+- lineages provide isolated parallel worker lanes with promotion review
+- safe checkpoints provide the canonical last-known-good rollback target
+
+## Verification
+
+Run the repository test suite locally with:
+
+```bash
+python -m pytest
+```
+
+You can also configure repository verification commands and record them with `lit verify run`.
 
 ## Current Limitations
 
-- `lit diff` compares the working tree to the current commit; it is not a full staged-vs-unstaged diff suite.
-- `lit log` walks first-parent history from `HEAD`.
-- Merge and rebase are real, but intentionally simplified for ordinary local cases.
-- Conflict handling is manual: `lit` writes conflict markers and keeps operation state, but it does not provide an interactive resolver.
-- Checkout requires a clean index and tracked working tree, and it refuses to overwrite certain untracked files.
-- The project is a prototype, so on-disk formats and edge-case behavior may still evolve.
+- `lit export` is a Git interoperability bridge, not a full Git transport or object-compatibility layer.
+- Conflict handling is manual: `lit` writes markers and preserves state, but it does not provide an interactive resolver.
+- The desktop UI exposes verified repository state, but it still favors a narrow local workflow over a full IDE.
+- On-disk formats are versioned and backward compatible with legacy commit metadata, but v1 remains intentionally scoped to one-machine execution workflows.
 
 ## Non-Goals
 
@@ -177,6 +148,6 @@ Different from Git:
 - Authentication, user accounts, or permissions
 - Multi-user collaboration
 - Cloud backup or sync
-- Large distributed workflows
+- Full Git compatibility
 
-For a browser-friendly version of the same guidance, open `website/index.html`.
+To open the static local website, open `website/index.html` in a browser.

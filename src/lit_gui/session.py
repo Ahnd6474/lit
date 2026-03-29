@@ -4,6 +4,15 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Callable, TypeVar
 
+from lit.backend_api import (
+    CreateCheckpointRequest,
+    CreateLineageRequest,
+    LitBackendService,
+    PreviewPromotionRequest,
+    PromoteLineageRequest,
+    RollbackRequest,
+    VerifyRevisionRequest,
+)
 from lit.merge_ops import MergeResult, merge_revision
 from lit.rebase_ops import RebaseResult, rebase_onto
 from lit.repository import CheckoutRecord, Repository
@@ -21,6 +30,7 @@ class LitRepositorySession(RepositorySession):
         *,
         recent_store: RecentRepositoriesStore | None = None,
     ) -> None:
+        self._backend = LitBackendService()
         self._recent_store = recent_store or RecentRepositoriesStore()
         self._root = self._resolve_root(root or Path.cwd())
         self._repository: Repository | None = self._reload_repository(self._root)
@@ -116,6 +126,117 @@ class LitRepositorySession(RepositorySession):
             update_selections=lambda commit_id: replace(self._selections, commit_id=commit_id),
         )
 
+    def create_checkpoint(
+        self,
+        *,
+        revision: str | None = None,
+        name: str | None = None,
+        note: str | None = None,
+        safe: bool = True,
+        pinned: bool = False,
+    ) -> SessionSnapshot:
+        repository = self._repository
+        if repository is None:
+            return self._rebuild_snapshot(
+                feedback=SnapshotFeedback(level="error", message="Open or initialize a repository first.")
+            )
+        revision_id = repository.resolve_revision(revision or "HEAD")
+        if revision_id is None:
+            return self._rebuild_snapshot(
+                feedback=SnapshotFeedback(level="error", message=f"revision not found: {revision or 'HEAD'}")
+            )
+        try:
+            operation = self._backend.create_checkpoint(
+                CreateCheckpointRequest(
+                    root=self._root,
+                    revision_id=revision_id,
+                    name=name,
+                    note=note,
+                    safe=safe,
+                    pinned=pinned,
+                )
+            )
+        except (FileNotFoundError, RuntimeError, ValueError) as error:
+            self._repository = self._reload_repository(self._root)
+            return self._rebuild_snapshot(feedback=SnapshotFeedback(level="error", message=str(error)))
+        checkpoint = self._backend.get_checkpoint(self._root, operation.checkpoint_id or "")
+        self._selections = replace(self._selections, commit_id=checkpoint.revision_id)
+        self._repository = self._reload_repository(self._root)
+        return self._rebuild_snapshot(
+            feedback=SnapshotFeedback(
+                level="success",
+                message=f"checkpoint {checkpoint.checkpoint_id} ready for {checkpoint.revision_id[:12] if checkpoint.revision_id else 'unborn'}",
+            )
+        )
+
+    def rollback_to_checkpoint(self, checkpoint_id: str | None = None) -> SessionSnapshot:
+        repository = self._repository
+        if repository is None:
+            return self._rebuild_snapshot(
+                feedback=SnapshotFeedback(level="error", message="Open or initialize a repository first.")
+            )
+        try:
+            operation = self._backend.rollback_to_checkpoint(
+                RollbackRequest(
+                    root=self._root,
+                    checkpoint_id=checkpoint_id,
+                    use_latest_safe=checkpoint_id is None,
+                    lineage_id=repository.current_branch_name(),
+                )
+            )
+        except (FileNotFoundError, RuntimeError, ValueError) as error:
+            self._repository = self._reload_repository(self._root)
+            return self._rebuild_snapshot(feedback=SnapshotFeedback(level="error", message=str(error)))
+        checkpoint = self._backend.get_checkpoint(self._root, operation.checkpoint_id or "")
+        self._selections = replace(
+            self._selections,
+            commit_id=checkpoint.revision_id,
+            change_path=None,
+        )
+        self._repository = self._reload_repository(self._root)
+        return self._rebuild_snapshot(
+            feedback=SnapshotFeedback(
+                level="success",
+                message=f"rolled back to {checkpoint.checkpoint_id}",
+            )
+        )
+
+    def verify_revision(
+        self,
+        *,
+        revision: str | None = None,
+        definition_name: str | None = None,
+    ) -> SessionSnapshot:
+        repository = self._repository
+        if repository is None:
+            return self._rebuild_snapshot(
+                feedback=SnapshotFeedback(level="error", message="Open or initialize a repository first.")
+            )
+        revision_id = repository.resolve_revision(revision or "HEAD")
+        if revision_id is None:
+            return self._rebuild_snapshot(
+                feedback=SnapshotFeedback(level="error", message=f"revision not found: {revision or 'HEAD'}")
+            )
+        try:
+            record = self._backend.record_verification(
+                VerifyRevisionRequest(
+                    root=self._root,
+                    revision_id=revision_id,
+                    definition_name=definition_name,
+                )
+            )
+        except (FileNotFoundError, RuntimeError, ValueError) as error:
+            self._repository = self._reload_repository(self._root)
+            return self._rebuild_snapshot(feedback=SnapshotFeedback(level="error", message=str(error)))
+        self._selections = replace(self._selections, commit_id=revision_id)
+        self._repository = self._reload_repository(self._root)
+        return self._rebuild_snapshot(
+            feedback=SnapshotFeedback(
+                level="success" if record.status.value in {"passed", "cached_pass"} else "info",
+                message=record.summary or f"verification {record.status.value}",
+            )
+        )
+
     def select_change(self, path: str) -> SessionSnapshot:
         self._selections = replace(self._selections, change_path=path)
         return self._rebuild_snapshot()
@@ -138,9 +259,105 @@ class LitRepositorySession(RepositorySession):
             update_selections=lambda branch: replace(self._selections, branch_name=branch.name),
         )
 
+    def create_lineage(
+        self,
+        lineage_id: str,
+        *,
+        forked_from: str | None = None,
+        base_checkpoint_id: str | None = None,
+        owned_paths: tuple[str, ...] = (),
+        allow_owned_path_overlap_with: tuple[str, ...] = (),
+        title: str = "",
+        description: str = "",
+    ) -> SessionSnapshot:
+        if self._repository is None:
+            return self._rebuild_snapshot(
+                feedback=SnapshotFeedback(level="error", message="Open or initialize a repository first.")
+            )
+        try:
+            self._backend.create_lineage(
+                CreateLineageRequest(
+                    root=self._root,
+                    lineage_id=lineage_id,
+                    forked_from=forked_from,
+                    base_checkpoint_id=base_checkpoint_id,
+                    owned_paths=owned_paths,
+                    allow_owned_path_overlap_with=allow_owned_path_overlap_with,
+                    title=title,
+                    description=description,
+                )
+            )
+        except (FileNotFoundError, RuntimeError, ValueError) as error:
+            self._repository = self._reload_repository(self._root)
+            return self._rebuild_snapshot(feedback=SnapshotFeedback(level="error", message=str(error)))
+        self._repository = self._reload_repository(self._root)
+        return self._rebuild_snapshot(
+            feedback=SnapshotFeedback(level="success", message=f"created lineage {lineage_id}")
+        )
+
     def select_branch(self, branch_name: str) -> SessionSnapshot:
         self._selections = replace(self._selections, branch_name=branch_name)
         return self._rebuild_snapshot()
+
+    def preview_lineage_promotion(
+        self,
+        lineage_id: str,
+        *,
+        destination_lineage_id: str | None = None,
+    ) -> SessionSnapshot:
+        if self._repository is None:
+            return self._rebuild_snapshot(
+                feedback=SnapshotFeedback(level="error", message="Open or initialize a repository first.")
+            )
+        try:
+            preview = self._backend.preview_lineage_promotion(
+                PreviewPromotionRequest(
+                    root=self._root,
+                    lineage_id=lineage_id,
+                    destination_lineage_id=destination_lineage_id,
+                )
+            )
+        except (FileNotFoundError, RuntimeError, ValueError) as error:
+            self._repository = self._reload_repository(self._root)
+            return self._rebuild_snapshot(feedback=SnapshotFeedback(level="error", message=str(error)))
+        detail = (
+            f"promotion preview clean for {preview.source_lineage_id} -> {preview.destination_lineage_id}"
+            if preview.can_promote
+            else (
+                f"promotion preview blocked by {len(preview.conflicts)} conflict(s) for "
+                f"{preview.source_lineage_id} -> {preview.destination_lineage_id}"
+            )
+        )
+        self._repository = self._reload_repository(self._root)
+        return self._rebuild_snapshot(feedback=SnapshotFeedback(level="info", message=detail))
+
+    def promote_lineage(
+        self,
+        lineage_id: str,
+        *,
+        destination_lineage_id: str | None = None,
+        expected_head_revision: str | None = None,
+    ) -> SessionSnapshot:
+        if self._repository is None:
+            return self._rebuild_snapshot(
+                feedback=SnapshotFeedback(level="error", message="Open or initialize a repository first.")
+            )
+        try:
+            operation = self._backend.promote_lineage(
+                PromoteLineageRequest(
+                    root=self._root,
+                    lineage_id=lineage_id,
+                    destination_lineage_id=destination_lineage_id,
+                    expected_head_revision=expected_head_revision,
+                )
+            )
+        except (FileNotFoundError, RuntimeError, ValueError) as error:
+            self._repository = self._reload_repository(self._root)
+            return self._rebuild_snapshot(feedback=SnapshotFeedback(level="error", message=str(error)))
+        self._repository = self._reload_repository(self._root)
+        return self._rebuild_snapshot(
+            feedback=SnapshotFeedback(level="success", message=operation.message or f"promoted {lineage_id}")
+        )
 
     def checkout(self, revision: str) -> SessionSnapshot:
         return self._run_repository_action(

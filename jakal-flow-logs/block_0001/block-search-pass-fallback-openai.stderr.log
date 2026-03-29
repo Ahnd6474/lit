@@ -1,0 +1,538 @@
+2026-03-29T11:12:38.633271Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.7 seconds
+Output:
+Get-Content : Cannot find path 'C:\Users\ahnd6\.jakal-flow-workspace\projects\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\.lineages\ln5\repo\src\lit\commands\gc.py' because i
+t does not exist.
+At line:2 char:1
++ Get-Content src/lit/commands/gc.py
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\ahnd6\...\commands\gc.py:String) [Get-Content], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+ 
+
+2026-03-29T11:12:38.636136Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.7 seconds
+Output:
+Get-Content : Cannot find path 'C:\Users\ahnd6\.jakal-flow-workspace\projects\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\.lineages\ln5\repo\src\lit\commands\checkpoint.py' b
+ecause it does not exist.
+At line:2 char:1
++ Get-Content src/lit/commands/checkpoint.py
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\ahnd6\...s\checkpoint.py:String) [Get-Content], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+ 
+
+2026-03-29T11:12:38.651713Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.7 seconds
+Output:
+Get-Content : Cannot find path 'C:\Users\ahnd6\.jakal-flow-workspace\projects\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\.lineages\ln5\repo\src\lit\commands\rollback.py' bec
+ause it does not exist.
+At line:2 char:1
++ Get-Content src/lit/commands/rollback.py
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\ahnd6\...nds\rollback.py:String) [Get-Content], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+ 
+
+2026-03-29T11:12:38.681528Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.8 seconds
+Output:
+Get-Content : Cannot find path 'C:\Users\ahnd6\.jakal-flow-workspace\projects\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\.lineages\ln5\repo\src\lit\commands\verify.py' becau
+se it does not exist.
+At line:2 char:1
++ Get-Content src/lit/commands/verify.py
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\ahnd6\...mands\verify.py:String) [Get-Content], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+ 
+
+2026-03-29T11:12:38.692474Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.8 seconds
+Output:
+Get-Content : Cannot find path 'C:\Users\ahnd6\.jakal-flow-workspace\projects\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\.lineages\ln5\repo\src\lit\commands\lineage.py' beca
+use it does not exist.
+At line:2 char:1
++ Get-Content src/lit/commands/lineage.py
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\ahnd6\...ands\lineage.py:String) [Get-Content], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+ 
+
+2026-03-29T11:12:38.710970Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.8 seconds
+Output:
+Get-Content : Cannot find path 'C:\Users\ahnd6\.jakal-flow-workspace\projects\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\.lineages\ln5\repo\src\lit\commands\artifact.py' bec
+ause it does not exist.
+At line:2 char:1
++ Get-Content src/lit/commands/artifact.py
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\ahnd6\...nds\artifact.py:String) [Get-Content], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+ 
+
+2026-03-29T11:12:38.711399Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.8 seconds
+Output:
+Get-Content : Cannot find path 'C:\Users\ahnd6\.jakal-flow-workspace\projects\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\.lineages\ln5\repo\src\lit\commands\export.py' becau
+se it does not exist.
+At line:2 char:1
++ Get-Content src/lit/commands/export.py
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\ahnd6\...mands\export.py:String) [Get-Content], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+ 
+
+2026-03-29T11:12:38.738866Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.8 seconds
+Output:
+Get-Content : Cannot find path 'C:\Users\ahnd6\.jakal-flow-workspace\projects\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\.lineages\ln5\repo\src\lit\commands\doctor.py' becau
+se it does not exist.
+At line:2 char:1
++ Get-Content src/lit/commands/doctor.py
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\ahnd6\...mands\doctor.py:String) [Get-Content], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+ 
+
+2026-03-29T11:13:05.328674Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.8 seconds
+Output:
+Get-Content : Cannot find path 'C:\Users\ahnd6\.jakal-flow-workspace\projects\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\.lineages\ln5\repo\tests\test_git_export.py' because
+ it does not exist.
+At line:2 char:1
++ Get-Content tests/test_git_export.py
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\ahnd6\...t_git_export.py:String) [Get-Content], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+ 
+
+2026-03-29T11:13:05.448945Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 1 seconds
+Output:
+Get-Content : Cannot find path 'C:\Users\ahnd6\.jakal-flow-workspace\projects\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\.lineages\ln5\repo\tests\test_cli_end_to_end.py' bec
+ause it does not exist.
+At line:2 char:1
++ Get-Content tests/test_cli_end_to_end.py
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\ahnd6\...i_end_to_end.py:String) [Get-Content], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+ 
+
+2026-03-29T11:13:05.482567Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.9 seconds
+Output:
+Get-Content : Cannot find path 'C:\Users\ahnd6\.jakal-flow-workspace\projects\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\.lineages\ln5\repo\tests\test_performance_smoke.py' 
+because it does not exist.
+At line:2 char:1
++ Get-Content tests/test_performance_smoke.py
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\ahnd6\...rmance_smoke.py:String) [Get-Content], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+ 
+
+2026-03-29T11:20:14.251354Z ERROR codex_core::exec: exec error: 파일 이름이나 확장명이 너무 깁니다. (os error 206)
+2026-03-29T11:20:14.446017Z ERROR codex_core::tools::router: error=execution error: Io(Os { code: 206, kind: InvalidFilename, message: "파일 이름이나 확장명이 너무 깁니다." })
+2026-03-29T11:30:50.221709Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.7 seconds
+Output:
+usage: lit [-h]
+           {init,add,commit,log,status,diff,restore,checkout,branch,merge,rebase}
+           ...
+lit: error: argument command: invalid choice: 'lineage' (choose from init, add, commit, log, status, diff, restore, checkout, branch, merge, rebase)
+
+2026-03-29T11:30:50.241304Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.7 seconds
+Output:
+usage: lit [-h]
+           {init,add,commit,log,status,diff,restore,checkout,branch,merge,rebase}
+           ...
+lit: error: argument command: invalid choice: 'verify' (choose from init, add, commit, log, status, diff, restore, checkout, branch, merge, rebase)
+
+2026-03-29T11:30:50.259488Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 0.7 seconds
+Output:
+usage: lit [-h]
+           {init,add,commit,log,status,diff,restore,checkout,branch,merge,rebase}
+           ...
+lit: error: argument command: invalid choice: 'checkpoint' (choose from init, add, commit, log, status, diff, restore, checkout, branch, merge, rebase)
+
+2026-03-29T11:31:22.470409Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 1 seconds
+Output:
+CMD ('init', 'repo') RC 0
+Initialized empty lit repository in C:\Users\ahnd6\.jakal-flow-workspace\projects\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\.lineages\ln5\repo\lit-cli-smoke-vn25zdq7\repo\.lit
+
+CMD ('add', 'story.txt') RC 0
+staged 1 path(s)
+
+CMD ('commit', '-m', 'base') RC 1
+
+STDERR Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\ahnd6\OneDrive\문서\GitHub\lit\src\lit\__main__.py", line 5, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "C:\Users\ahnd6\OneDrive\문서\GitHub\lit\src\lit\cli.py", line 18, in main
+    return args.handler(args)
+           ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ahnd6\OneDrive\문서\GitHub\lit\src\lit\commands\commit.py", line 17, in run
+    commit_id = repository.commit(args.message)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ahnd6\OneDrive\문서\GitHub\lit\src\lit\repository.py", line 820, in commit
+    write_json(
+  File "C:\Users\ahnd6\OneDrive\문서\GitHub\lit\src\lit\storage.py", line 72, in write_json
+    write_bytes(path, dump_json(data).encode(TEXT_ENCODING))
+  File "C:\Users\ahnd6\OneDrive\문서\GitHub\lit\src\lit\storage.py", line 60, in write_bytes
+    _atomic_write_bytes(path, data)
+  File "C:\Users\ahnd6\OneDrive\문서\GitHub\lit\src\lit\storage.py", line 44, in _atomic_write_bytes
+    temporary.write_bytes(data)
+  File "C:\Users\ahnd6\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1036, in write_bytes
+    with self.open(mode='wb') as f:
+         ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ahnd6\AppData\Local\Programs\Python\Python312\Lib\pathlib.py", line 1013, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\ahnd6\\.jakal-flow-workspace\\projects\\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\\.lineages\\ln5\\repo\\lit-cli-smoke-vn25zdq7\\repo\\.lit\\v1\\revisions\\.67e1026db89632e07af68ac981ca8c5a91af3fc054920a797be930ad18270913.json.tmp-7f4d57f89140406aac68bee902ca6487'
+
+unexpected rc 1 for ('commit', '-m', 'base')
+
+2026-03-29T11:46:34.721987Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in C:\Users\ahnd6\ln5repo\tests\gui\backend\test_session.py:
+    assert snapshot.repository.status_text == "Working tree clean."
+    assert snapshot.repository.current_branch == "feature"
+    assert snapshot.repository.status_text == "Working tree clean."
+    assert (tmp_path / "story.txt").read_text(encoding="utf-8") == "feature change\n"
+    assert "Rebase state cleared." in snapshot.changes.detail.guidance.body
+2026-03-29T11:48:02.961414Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 20.7 seconds
+Output:
+F.............                                                           [100%]
+================================== FAILURES ===================================
+_ test_cli_release_surface_workflow_covers_checkpoint_verify_lineage_artifact_gc_doctor_and_export _
+
+tmp_path = WindowsPath('C:/Users/ahnd6/AppData/Local/Temp/pytest-of-ahnd6/pytest-92/test_cli_release_surface_workf0')
+
+    def test_cli_release_surface_workflow_covers_checkpoint_verify_lineage_artifact_gc_doctor_and_export(
+        tmp_path: Path,
+    ) -> None:
+        repo_root = tmp_path / "repo"
+        artifact_home = tmp_path / "artifact-home"
+        env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "LIT_ARTIFACT_HOME": str(artifact_home)}
+    
+        _run_lit(tmp_path, "init", "repo", env=env)
+    
+        story = repo_root / "story.txt"
+        story.write_text("base\n", encoding="utf-8")
+        _run_lit(repo_root, "add", "story.txt", env=env)
+        _run_lit(repo_root, "commit", "-m", "base", env=env)
+    
+        repo = Repository.open(repo_root)
+        head_revision = repo.current_commit_id()
+        assert head_revision is not None
+    
+        checkpoint_payload = _json_output(
+            _run_lit(
+                repo_root,
+                "checkpoint",
+                "create",
+                "--name",
+                "safe-base",
+                "--json",
+                env=env,
+            )
+        )
+        checkpoint_id = checkpoint_payload["checkpoint"]["checkpoint_id"]
+        assert checkpoint_payload["checkpoint"]["safe"] is True
+    
+        checkpoint_list = _json_output(
+            _run_lit(repo_root, "checkpoint", "list", "--json", env=env)
+        )
+        assert checkpoint_list["latest_safe_checkpoint_id"] == checkpoint_id
+    
+        _write_verification_commands(
+            repo,
+            [
+                {
+                    "name": "smoke",
+                    "command": [sys.executable, "-c", "print('ok')"],
+                    "command_identity": "smoke-python",
+                }
+            ],
+        )
+    
+        verify_payload = _json_output(
+            _run_lit(
+                repo_root,
+                "verify",
+                "run",
+                "--definition",
+                "smoke",
+                "--json",
+                env=env,
+            )
+        )
+        assert verify_payload["status"] == "passed"
+        assert len(verify_payload["output_artifact_ids"]) == 1
+    
+        verify_status = _json_output(
+            _run_lit(repo_root, "verify", "status", "--json", env=env)
+        )
+        assert verify_status["status"] in {"passed", "cached_pass", "stale"}
+    
+        lineage_payload = _json_output(
+            _run_lit(
+                repo_root,
+                "lineage",
+                "create",
+                "feature-a",
+                "--owned-path",
+                "src/lit",
+                "--description",
+                "parallel worker lane",
+                "--json",
+                env=env,
+            )
+        )
+        assert lineage_payload["lineage"]["lineage_id"] == "feature-a"
+    
+        preview_payload = _json_output(
+            _run_lit(
+                repo_root,
+                "lineage",
+                "promote",
+                "feature-a",
+                "--preview",
+                "--json",
+                env=env,
+            )
+        )
+        assert preview_payload["source_lineage_id"] == "feature-a"
+    
+        store = ArtifactStore(artifact_home)
+        manifest = store.store_bytes(
+            b"artifact-bytes",
+            repository_root=repo_root,
+            kind="checkpoint-bundle",
+            relative_path="bundles/state.tar",
+            links=(ArtifactLink.revision(head_revision),),
+        )
+    
+        artifact_list = _json_output(
+            _run_lit(repo_root, "artifact", "list", "--json", env=env)
+        )
+        assert artifact_list[0]["artifact_id"] == manifest.artifact_id
+    
+        artifact_show = _json_output(
+            _run_lit(repo_root, "artifact", "show", manifest.artifact_id or "", "--json", env=env)
+        )
+        assert artifact_show["kind"] == "checkpoint-bundle"
+    
+        artifact_link = _json_output(
+            _run_lit(
+                repo_root,
+                "artifact",
+                "link",
+                manifest.artifact_id or "",
+                "--owner-kind",
+                "checkpoint",
+                "--owner-id",
+                checkpoint_id,
+                "--relationship",
+                "checkpoint-input",
+                "--json",
+                env=env,
+            )
+        )
+        assert any(link["owner_kind"] == "checkpoint" for link in artifact_link["links"])
+    
+        usage_payload = _json_output(
+            _run_lit(repo_root, "artifact", "usage", "--json", env=env)
+        )
+        assert usage_payload["total_objects"] >= 1
+    
+        gc_payload = _json_output(
+            _run_lit(repo_root, "gc", "--dry-run", "--json", env=env)
+        )
+        assert gc_payload["result"]["dry_run"] is True
+    
+        doctor_payload = _json_output(
+            _run_lit(repo_root, "doctor", "--json", env=env)
+        )
+>       assert doctor_payload["healthy"] is True
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'healthy'
+
+tests\test_cli_end_to_end.py:164: KeyError
+=========================== short test summary info ===========================
+FAILED tests/test_cli_end_to_end.py::test_cli_release_surface_workflow_covers_checkpoint_verify_lineage_artifact_gc_doctor_and_export
+1 failed, 13 passed in 18.87s
+
+2026-03-29T11:51:44.086914Z ERROR codex_core::tools::router: error=Exit code: 1
+Wall time: 60.3 seconds
+Output:
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.0.2, pluggy-1.6.0
+rootdir: C:\Users\ahnd6\.jakal-flow-workspace\projects\c-users-ahnd6-onedrive-github-lit-main-679f7c0bcc\.lineages\ln5\repo
+configfile: pyproject.toml
+testpaths: tests
+collected 59 items
+
+tests\gui\backend\test_session.py ......                                 [ 10%]
+tests\gui\views\test_branches_operations.py .....                        [ 18%]
+tests\gui\views\test_changes_history.py ..                               [ 22%]
+tests\gui\views\test_home_files.py ..                                    [ 25%]
+tests\gui\views\test_release_surfaces.py .                               [ 27%]
+tests\test_artifacts.py ....                                             [ 33%]
+tests\test_backend_integration.py ..                                     [ 37%]
+tests\test_bootstrap.py ..................F                              [ 69%]
+tests\test_cli_end_to_end.py F                                           [ 71%]
+tests\test_git_export.py .                                               [ 72%]
+tests\test_lineage.py ......                                             [ 83%]
+tests\test_lit_gui_bootstrap.py ....                                     [ 89%]
+tests\test_performance_smoke.py .                                        [ 91%]
+tests\test_verification.py .....                                         [100%]
+
+================================== FAILURES ===================================
+___________ test_readme_and_website_cover_verified_local_workflows ____________
+
+    def test_readme_and_website_cover_verified_local_workflows() -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
+        website = (ROOT / "website" / "index.html").read_text(encoding="utf-8").lower()
+        styles = (ROOT / "website" / "styles.css").read_text(encoding="utf-8")
+    
+        for content in (readme, website):
+            assert "local-only" in content
+            assert "offline" in content
+            assert "python -m pip install -e ." in content
+            assert "quick start" in content
+            assert "lit init" in content
+            assert "lit add" in content
+            assert "lit commit -m" in content
+>           assert "lit branch" in content
+E           AssertionError: assert 'lit branch' in '# lit\n\n`lit` is a local execution vcs for autonomous coding workflows on one machine. it is local-only and offline-...ackup or sync\n- full git compatibility\n\nto open the static local website, open `website/index.html` in a browser.\n'
+
+tests\test_bootstrap.py:753: AssertionError
+_ test_cli_release_surface_workflow_covers_checkpoint_verify_lineage_artifact_gc_doctor_and_export _
+
+tmp_path = WindowsPath('C:/Users/ahnd6/AppData/Local/Temp/pytest-of-ahnd6/pytest-94/test_cli_release_surface_workf0')
+
+    def test_cli_release_surface_workflow_covers_checkpoint_verify_lineage_artifact_gc_doctor_and_export(
+        tmp_path: Path,
+    ) -> None:
+        repo_root = tmp_path / "repo"
+        artifact_home = tmp_path / "artifact-home"
+        env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "LIT_ARTIFACT_HOME": str(artifact_home)}
+    
+        _run_lit(tmp_path, "init", "repo", env=env)
+    
+        story = repo_root / "story.txt"
+        story.write_text("base\n", encoding="utf-8")
+        _run_lit(repo_root, "add", "story.txt", env=env)
+        _run_lit(repo_root, "commit", "-m", "base", env=env)
+    
+        repo = Repository.open(repo_root)
+        head_revision = repo.current_commit_id()
+        assert head_revision is not None
+    
+        checkpoint_payload = _json_output(
+            _run_lit(
+                repo_root,
+                "checkpoint",
+                "create",
+                "--name",
+                "safe-base",
+                "--json",
+                env=env,
+            )
+        )
+        checkpoint_id = checkpoint_payload["checkpoint"]["checkpoint_id"]
+        assert checkpoint_payload["checkpoint"]["safe"] is True
+    
+        checkpoint_list = _json_output(
+            _run_lit(repo_root, "checkpoint", "list", "--json", env=env)
+        )
+        assert checkpoint_list["latest_safe_checkpoint_id"] == checkpoint_id
+    
+        _write_verification_commands(
+            repo,
+            [
+                {
+                    "name": "smoke",
+                    "command": [sys.executable, "-c", "print('ok')"],
+                    "command_identity": "smoke-python",
+                }
+            ],
+        )
+    
+        verify_payload = _json_output(
+            _run_lit(
+                repo_root,
+                "verify",
+                "run",
+                "--definition",
+                "smoke",
+                "--json",
+                env=env,
+            )
+        )
+        assert verify_payload["status"] == "passed"
+        assert len(verify_payload["output_artifact_ids"]) == 1
+    
+        verify_status = _json_output(
+            _run_lit(repo_root, "verify", "status", "--json", env=env)
+        )
+        assert verify_status["status"] in {"passed", "cached_pass", "stale"}
+    
+        lineage_payload = _json_output(
+            _run_lit(
+                repo_root,
+                "lineage",
+                "create",
+                "feature-a",
+                "--owned-path",
+                "src/lit",
+                "--description",
+                "parallel worker lane",
+                "--json",
+                env=env,
+            )
+        )
+        assert lineage_payload["lineage"]["lineage_id"] == "feature-a"
+    
+        preview_payload = _json_output(
+            _run_lit(
+                repo_root,
+                "lineage",
+                "promote",
+                "feature-a",
+                "--preview",
+                "--json",
+                env=env,
+            )
+        )
+        assert preview_payload["source_lineage_id"] == "feature-a"
+    
+        store = ArtifactStore(artifact_home)
+        manifest = store.store_bytes(
+            b"artifact-bytes",
+            repository_root=repo_root,
+            kind="checkpoint-bundle",
+            relative_path="bundles/state.tar",
+            links=(ArtifactLink.revision(head_revision),),
+        )
+    
+        artifact_list = _json_output(
+            _run_lit(repo_root, "artifact", "list", "--json", env=env)
+        )
+>       assert artifact_list[0]["artifact_id"] == manifest.artifact_id
+E       AssertionError: assert 'artifact-39976714bffa' == 'artifact-f9222dd286a8'
+E         
+E         - artifact-f9222dd286a8
+E         + artifact-39976714bffa
+
+tests\test_cli_end_to_end.py:126: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_bootstrap.py::test_readme_and_website_cover_verified_local_workflows
+FAILED tests/test_cli_end_to_end.py::test_cli_release_surface_workflow_covers_checkpoint_verify_lineage_artifact_gc_doctor_and_export
+======================== 2 failed, 57 passed in 56.69s ========================
+

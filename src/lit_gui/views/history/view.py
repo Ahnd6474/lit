@@ -24,6 +24,7 @@ class HistoryView(QtWidgets.QWidget):
         self._on_refresh_requested = on_refresh_requested
         self._summary_labels: list[QtWidgets.QLabel] = []
         self._commit_buttons: list[QtWidgets.QPushButton] = []
+        self._checkpoint_buttons: list[QtWidgets.QPushButton] = []
         self._changed_file_buttons: list[QtWidgets.QPushButton] = []
 
         self.title_label = QtWidgets.QLabel()
@@ -32,8 +33,10 @@ class HistoryView(QtWidgets.QWidget):
         self.refresh_button = QtWidgets.QPushButton("Refresh History")
         self.diff_panel = DiffPanel("Commit Preview")
         self.timeline_group = QtWidgets.QGroupBox()
+        self.checkpoint_group = QtWidgets.QGroupBox()
         self.changed_files_group = QtWidgets.QGroupBox()
         self._timeline_empty_label = QtWidgets.QLabel("No commits loaded yet.")
+        self._checkpoint_empty_label = QtWidgets.QLabel("Selected commit has no checkpoints.")
         self._changed_files_empty_label = QtWidgets.QLabel("Select a commit to inspect its changed files.")
 
         layout = QtWidgets.QVBoxLayout(self)
@@ -45,6 +48,7 @@ class HistoryView(QtWidgets.QWidget):
             self.subtitle_label,
             self.root_label,
             self._timeline_empty_label,
+            self._checkpoint_empty_label,
             self._changed_files_empty_label,
         ):
             label.setWordWrap(True)
@@ -69,6 +73,9 @@ class HistoryView(QtWidgets.QWidget):
         self._timeline_layout = QtWidgets.QVBoxLayout(self.timeline_group)
         self._timeline_layout.addWidget(self._timeline_empty_label)
         left_column.addWidget(self.timeline_group)
+        self._checkpoint_layout = QtWidgets.QVBoxLayout(self.checkpoint_group)
+        self._checkpoint_layout.addWidget(self._checkpoint_empty_label)
+        left_column.addWidget(self.checkpoint_group)
         self._changed_files_layout = QtWidgets.QVBoxLayout(self.changed_files_group)
         self._changed_files_layout.addWidget(self._changed_files_empty_label)
         left_column.addWidget(self.changed_files_group)
@@ -91,6 +98,10 @@ class HistoryView(QtWidgets.QWidget):
     def changed_file_buttons(self) -> tuple[QtWidgets.QPushButton, ...]:
         return tuple(self._changed_file_buttons)
 
+    @property
+    def checkpoint_buttons(self) -> tuple[QtWidgets.QPushButton, ...]:
+        return tuple(self._checkpoint_buttons)
+
     def apply_state(self, state: HistoryViewState) -> None:
         self.state = state
         self.title_label.setText(state.title)
@@ -108,6 +119,7 @@ class HistoryView(QtWidgets.QWidget):
             (commit for commit in state.commits if commit.commit_id == state.selected_commit),
             None,
         )
+        self._apply_checkpoints(state.checkpoints, state.selected_commit)
         self._apply_changed_files(selected, state.selected_path)
 
     def _apply_summary_items(self, items: tuple[SummaryItem, ...]) -> None:
@@ -146,15 +158,50 @@ class HistoryView(QtWidgets.QWidget):
             timestamp = commit.committed_at or "unknown"
             author = commit.author or "lit"
             message = commit.message or "(empty commit message)"
+            checkpoint_count = len(commit.checkpoint_ids)
+            verification = commit.verification_status
             button.setText(
                 f"{short_id}  {message}\n"
-                f"{author}  {timestamp}  {len(commit.changed_paths)} path(s)"
+                f"{author}  {timestamp}  {len(commit.changed_paths)} path(s)  "
+                f"{checkpoint_count} checkpoint(s)  {verification}"
             )
             button.setChecked(commit.commit_id == selected_commit)
             button._target_commit_id = commit.commit_id
             button.setVisible(True)
 
         for button in self._commit_buttons[len(commits):]:
+            button.setVisible(False)
+
+    def _apply_checkpoints(
+        self,
+        checkpoints,
+        selected_commit: str | None,
+    ) -> None:
+        visible = tuple(
+            checkpoint
+            for checkpoint in checkpoints
+            if selected_commit is None or checkpoint.revision_id == selected_commit
+        )
+        self.checkpoint_group.setTitle(f"Checkpoint Timeline ({len(visible)})")
+        self._checkpoint_empty_label.setVisible(not visible)
+
+        for index, checkpoint in enumerate(visible):
+            if index >= len(self._checkpoint_buttons):
+                button = QtWidgets.QPushButton()
+                button.setCheckable(False)
+                self._checkpoint_buttons.append(button)
+                self._checkpoint_layout.addWidget(button)
+            button = self._checkpoint_buttons[index]
+            tags = ["safe" if checkpoint.safe else "unsafe"]
+            if checkpoint.pinned:
+                tags.append("pinned")
+            button.setText(
+                f"{checkpoint.checkpoint_id} [{', '.join(tags)}] "
+                f"{checkpoint.name or checkpoint.note or 'checkpoint'}"
+            )
+            button.setVisible(True)
+
+        for button in self._checkpoint_buttons[len(visible):]:
             button.setVisible(False)
 
     def _apply_changed_files(

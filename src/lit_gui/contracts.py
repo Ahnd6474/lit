@@ -43,6 +43,13 @@ class RepositoryDescriptor:
     root: Path | None = None
     current_branch: str | None = None
     head_commit: str | None = None
+    current_lineage: str | None = None
+    latest_safe_checkpoint_id: str | None = None
+    verification_status: str = "never_verified"
+    verification_summary: str = ""
+    healthy: bool = True
+    health_summary: str = ""
+    artifact_usage_summary: str = ""
     status_text: str = ""
     is_lit_repository: bool = False
     operation: OperationSummary | None = None
@@ -131,6 +138,11 @@ class CommitSummary:
     message: str
     author: str = ""
     committed_at: str = ""
+    lineage_id: str | None = None
+    verification_status: str = "never_verified"
+    verification_summary: str = ""
+    checkpoint_ids: tuple[str, ...] = ()
+    artifact_ids: tuple[str, ...] = ()
     changed_paths: tuple[str, ...] = ()
 
 
@@ -140,6 +152,31 @@ class BranchSummary:
     commit_id: str | None = None
     is_current: bool = False
     note: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class CheckpointSummary:
+    checkpoint_id: str
+    revision_id: str | None = None
+    name: str | None = None
+    note: str | None = None
+    safe: bool = False
+    pinned: bool = False
+    approval_state: str = "not_requested"
+    verification_status: str = "never_verified"
+    lineage_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LineageSummary:
+    lineage_id: str
+    head_revision: str | None = None
+    base_checkpoint_id: str | None = None
+    status: str = "active"
+    title: str = ""
+    description: str = ""
+    owned_paths: tuple[str, ...] = ()
+    checkpoint_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +191,10 @@ class FileNode:
 class HomeViewState(BaseViewState):
     context: RepositoryDescriptor | None = None
     highlights: tuple[SummaryItem, ...] = ()
+    checkpoints: tuple[CheckpointSummary, ...] = ()
+    lineages: tuple[LineageSummary, ...] = ()
+    health_items: tuple[SummaryItem, ...] = ()
+    artifact_items: tuple[SummaryItem, ...] = ()
     recent_repositories: tuple[RecentRepository, ...] = ()
     call_to_action: str = ""
 
@@ -174,6 +215,7 @@ class HistoryViewState(BaseViewState):
     context: RepositoryDescriptor | None = None
     highlights: tuple[SummaryItem, ...] = ()
     commits: tuple[CommitSummary, ...] = ()
+    checkpoints: tuple[CheckpointSummary, ...] = ()
     selected_commit: str | None = None
     selected_path: str | None = None
 
@@ -183,6 +225,7 @@ class BranchesViewState(BaseViewState):
     context: RepositoryDescriptor | None = None
     highlights: tuple[SummaryItem, ...] = ()
     branches: tuple[BranchSummary, ...] = ()
+    lineages: tuple[LineageSummary, ...] = ()
     selected_branch: str | None = None
     can_checkout: bool = False
     can_merge: bool = False
@@ -258,6 +301,31 @@ class RepositorySession(ABC):
         """Create a commit and return the updated shell snapshot."""
 
     @abstractmethod
+    def create_checkpoint(
+        self,
+        *,
+        revision: str | None = None,
+        name: str | None = None,
+        note: str | None = None,
+        safe: bool = True,
+        pinned: bool = False,
+    ) -> SessionSnapshot:
+        """Create a checkpoint for the selected or current revision."""
+
+    @abstractmethod
+    def rollback_to_checkpoint(self, checkpoint_id: str | None = None) -> SessionSnapshot:
+        """Rollback to a checkpoint or the latest safe checkpoint."""
+
+    @abstractmethod
+    def verify_revision(
+        self,
+        *,
+        revision: str | None = None,
+        definition_name: str | None = None,
+    ) -> SessionSnapshot:
+        """Record verification for a revision and rebuild the shell snapshot."""
+
+    @abstractmethod
     def select_change(self, path: str) -> SessionSnapshot:
         """Update the selected change and its shared detail slots."""
 
@@ -274,8 +342,41 @@ class RepositorySession(ABC):
         """Create a branch and return the updated shell snapshot."""
 
     @abstractmethod
+    def create_lineage(
+        self,
+        lineage_id: str,
+        *,
+        forked_from: str | None = None,
+        base_checkpoint_id: str | None = None,
+        owned_paths: tuple[str, ...] = (),
+        allow_owned_path_overlap_with: tuple[str, ...] = (),
+        title: str = "",
+        description: str = "",
+    ) -> SessionSnapshot:
+        """Create a lineage boundary for isolated parallel work."""
+
+    @abstractmethod
     def select_branch(self, branch_name: str) -> SessionSnapshot:
         """Update the selected branch and its shared detail slots."""
+
+    @abstractmethod
+    def preview_lineage_promotion(
+        self,
+        lineage_id: str,
+        *,
+        destination_lineage_id: str | None = None,
+    ) -> SessionSnapshot:
+        """Preview lineage promotion conflicts and rebuild the shell snapshot."""
+
+    @abstractmethod
+    def promote_lineage(
+        self,
+        lineage_id: str,
+        *,
+        destination_lineage_id: str | None = None,
+        expected_head_revision: str | None = None,
+    ) -> SessionSnapshot:
+        """Promote one lineage into another and rebuild the shell snapshot."""
 
     @abstractmethod
     def checkout(self, revision: str) -> SessionSnapshot:

@@ -1,101 +1,54 @@
 # lit
 
-`lit` is a **local-first version control project** that now has two parallel goals:
+`lit` is a local execution VCS for autonomous coding workflows on one machine. It is local-only and offline-first, but it is not a local Git clone.
 
-1. A practical Git-like local VCS CLI for everyday offline checkpointing.
-2. A v1 foundation for richer local workflow records (revisions, checkpoints, lineages, verifications, artifacts, and operations) that both CLI and GUI can share.
+The v1 product is aimed at long-running local agent work and the future Jakal Flow repository backend. Its core surfaces are safe checkpoints, complete rollback, structured provenance, verification-aware history, lineage isolation, local artifact management, an installable CLI, and a desktop UI.
 
-The previous README focused mainly on the original CLI prototype. This version reflects the project's broader current direction and implementation status.
+## What lit Does
 
----
+- Initializes a repository inside any local folder with `lit init`.
+- Stages files and directories with `lit add`.
+- Creates local revisions with `lit commit -m`.
+- Creates safe checkpoints with `lit checkpoint create`.
+- Rolls back to the latest safe checkpoint or a selected checkpoint with `lit rollback`.
+- Records or replays verification with `lit verify`.
+- Isolates parallel local work with `lit lineage`.
+- Tracks local artifact manifests, usage, and garbage collection with `lit artifact` and `lit gc`.
+- Inspects repository health with `lit doctor`.
+- Builds a Git-facing export plan with `lit export`.
+- Still supports familiar local `lit branch`, `lit checkout`, `lit merge`, and `lit rebase` workflows.
 
-## Current Project Status (March 2026)
+## Local-Only Design
 
-### Overall maturity
+`lit` is intentionally local-only and offline-only.
 
-- **CLI local VCS workflow is implemented and test-covered** for init/add/commit/log/status/diff/restore/checkout/branch/merge/rebase.
-- **Desktop GUI MVP is implemented** with PySide6 and covers Home/Changes/History/Branches/Files flows on top of the same local repository model.
-- **v1 domain contracts are in place** for autonomous/local workflow metadata (revision/checkpoint/lineage/verification/artifact/operation records).
-- **Migration is in progress** from legacy ad-hoc commit metadata and storage paths to the newer v1 contract/layout boundary.
+- No remote repositories
+- No `push`, `pull`, `fetch`, or `clone`
+- No accounts, login, sync, or cloud service
+- No team collaboration workflow
+- No background daemon or server
 
-In short: the project is no longer just a tiny CLI toy; it is now an evolving local workflow platform with both CLI and GUI clients.
-
-### What is already working
-
-- Local repository initialization and object storage under `.lit`.
-- Staging and committing snapshots.
-- Status and diff inspection for local working tree changes.
-- Local branch creation/listing and checkout.
-- Local merge and rebase with conflict marker writing + abort flows.
-- Restore of tracked paths from a source revision.
-- GUI operations for staging, commit creation, history browsing, branch operations, restore, and merge/rebase entry points.
-
-### Current Limitations
-
-- No remote or network workflows (`push`/`pull`/`fetch`/`clone` are out of scope).
-- Merge/rebase behavior is real but intentionally simplified.
-- Conflict resolution is manual (no built-in interactive conflict resolver).
-- Some v1 contract surfaces are available before every engine/storage caller is fully migrated.
-
----
-
-## Project Direction
-
-`lit` is intentionally **offline and local-only**. The design target is dependable single-machine workflows with richer local provenance and operation records, not team sync infrastructure.
-
-### Core architectural boundaries (active direction)
-
-- `src/lit/domain.py` defines canonical v1 records and serialization compatibility behavior.
-- `src/lit/layout.py` centralizes canonical `.lit` directory/file layout decisions.
-- `src/lit/backend_api.py` defines a narrower backend service boundary so higher layers don't hardcode repository internals.
-- `src/lit_gui/` is a thin GUI shell that renders immutable session DTO snapshots and calls session/backend boundaries.
-
-This architecture is aimed at keeping CLI/GUI/export/future adapters consistent as the project grows.
-
----
-
-## Feature Matrix
-
-| Area | Status | Notes |
-| --- | --- | --- |
-| Local init/add/commit/log/status/diff | ✅ Implemented | Core local workflow commands exist and are tested. |
-| Restore/checkout/branch | ✅ Implemented | Local branch & revision navigation is available. |
-| Merge/rebase + abort | ✅ Implemented (simplified) | Conflicts write markers; user resolves manually or aborts. |
-| Desktop GUI MVP | ✅ Implemented | Home, Changes, History, Branches, Files views. |
-| v1 contracts (`domain.py`) | ✅ Introduced | Canonical typed records for revision/checkpoint/lineage/etc. |
-| Canonical layout (`layout.py`) | ✅ Introduced | Centralized `.lit` path model for legacy + v1 surfaces. |
-| Full backend migration to v1 | 🚧 In progress | Some legacy behaviors remain while migration continues. |
-| Remote/team collaboration | ❌ Non-goal | Project remains local-only by design. |
-
----
+If you need multi-machine sync or shared collaboration, use Git instead.
 
 ## Installation
 
-`lit` targets **Python 3.12+**.
+`lit` targets Python 3.12+.
 
-From repo root:
+Base CLI install:
 
 ```bash
 python -m pip install -e .
 ```
 
-CLI entry points:
+Optional desktop GUI install:
 
 ```bash
-lit --help
+python -m pip install -e .[gui]
 ```
 
-GUI entry points:
+That installs the `lit` console command. The GUI entrypoint is `lit-gui` when the optional GUI dependency is installed.
 
-```bash
-lit-gui
-# or
-python -m lit_gui.app
-```
-
----
-
-## Quick Start (CLI)
+## Quick Start
 
 ```bash
 mkdir demo
@@ -104,79 +57,97 @@ lit init
 printf "hello\n" > note.txt
 lit add note.txt
 lit commit -m "Create first checkpoint"
+lit checkpoint create --name safe-start
 lit status
 lit log
+lit doctor
 ```
 
----
+## Release Surface
 
-## Command Overview
+### CLI
 
-| Command | Purpose |
-| --- | --- |
-| `lit init [path]` | Create a `.lit` repository. |
-| `lit add <paths...>` | Stage files or directories. |
-| `lit commit -m "message"` | Write the staged snapshot as a commit. |
-| `lit status` | Show staged, modified, deleted, and untracked files. |
-| `lit diff` | Show the working tree diff against the current commit. |
-| `lit log` | Show first-parent commit history from `HEAD`. |
-| `lit restore [paths...] --source <rev>` | Restore tracked files from a revision without moving `HEAD`. |
-| `lit checkout <branch-or-commit>` | Switch branches or detach `HEAD` at a commit. |
-| `lit branch [name] [--start-point <rev>]` | List branches or create a new branch. |
-| `lit merge <rev>` | Merge another local revision into the current branch. |
-| `lit merge --abort` | Clear merge state and restore the pre-merge tree. |
-| `lit rebase <rev>` | Rebase the current branch onto another local revision. |
-| `lit rebase --abort` | Clear rebase state and restore the original branch tip. |
+```bash
+lit checkpoint list
+lit rollback
+lit verify status
+lit lineage list
+lit artifact usage
+lit gc --dry-run
+lit export --json
+```
 
----
+Most inspection workflows support `--json` for machine-readable output.
 
-## GUI MVP Scope
+### Desktop GUI
 
-After installing editable package (`pip install -e .`), run `lit-gui`.
+After `python -m pip install -e .[gui]`, launch the desktop app with either command:
 
-The GUI currently supports:
+```bash
+lit-gui
+# or
+python -m lit_gui.app
+```
 
-1. Open/initialize local repository folders.
-2. Stage files and create commits from Changes.
-3. Inspect commit timeline and per-file diffs from History.
-4. Create/switch branches, restore paths, and start merge/rebase from Branches.
-5. Review operation/conflict state in sidebar + right detail panel.
+The desktop shell uses the same backend records as the CLI and exposes:
 
-GUI tests run in CI/local without a full desktop runtime by using a narrow fake `PySide6` module in tests.
+- checkpoint timeline and rollback anchors
+- commit provenance and verification state
+- lineage state and promotion preview
+- conflict review for merge and rebase
+- artifact usage and repository health
 
----
+## Git Bridge, Not Git Parity
 
-## Testing
+`lit` keeps some Git-like commands for familiarity, but Git parity is not the goal.
 
-Run the full repository test suite:
+Similar to Git:
+
+- snapshot-based local commits
+- an index/staging area before commit
+- local branch, merge, checkout, and rebase workflows
+- detached `HEAD` when checking out a commit directly
+
+Different from Git:
+
+- `lit` centers safe checkpoints, rollback, provenance, verification, and lineage isolation
+- `lit export` produces a Git-facing plan; it does not turn `lit` into Git
+- there are no remotes and no `push`, `pull`, `fetch`, or `clone`
+- conflict handling is intentionally local and explicit
+
+## Jakal Flow Path
+
+`lit` is intended to be a credible future backend for Jakal Flow:
+
+- planner and executor runs can record lineage, block, step, and run provenance
+- verification results are attached to revision and checkpoint boundaries
+- lineages provide isolated parallel worker lanes with promotion review
+- safe checkpoints provide the canonical last-known-good rollback target
+
+## Verification
+
+Run the repository test suite locally with:
 
 ```bash
 python -m pytest
 ```
 
-Test directories to know:
+You can also configure repository verification commands and record them with `lit verify run`.
 
-- `tests/` for CLI/backend coverage.
-- `tests/gui/backend/` for repository session shaping and operation-state behavior.
-- `tests/gui/views/` for view-level shell wiring and workflows.
+## Current Limitations
 
----
+- `lit export` is a Git interoperability bridge, not a full Git transport or object-compatibility layer.
+- Conflict handling is manual: `lit` writes markers and preserves state, but it does not provide an interactive resolver.
+- The desktop UI exposes verified repository state, but it still favors a narrow local workflow over a full IDE.
+- On-disk formats are versioned and backward compatible with legacy commit metadata, but v1 remains intentionally scoped to one-machine execution workflows.
 
 ## Non-Goals
 
-`lit` intentionally does **not** aim to be a Git replacement for distributed team collaboration.
+- Remote hosting
+- `push`, `pull`, `fetch`, or `clone`
+- Authentication, user accounts, or permissions
+- Multi-user collaboration
+- Cloud backup or sync
+- Full Git compatibility
 
-- No hosted remotes.
-- No background sync.
-- No account/auth model.
-- No cross-machine collaboration pipeline.
-
-If you need those capabilities, use Git.
-
----
-
-## Developer Notes
-
-- The v1 contract freeze and migration intent are described in `docs/lit-v1-implementation-plan.md`.
-- GUI layering and session boundary details are described in `docs/gui-architecture.md`.
-- A browser-friendly static project page is available at `website/index.html`.
+To open the static local website, open `website/index.html` in a browser.

@@ -24,6 +24,8 @@ class HomeView(QtWidgets.QWidget):
         self._on_initialize_requested = on_initialize_requested
         self._on_recent_requested = on_recent_requested
         self._summary_labels: list[QtWidgets.QLabel] = []
+        self._health_labels: list[QtWidgets.QLabel] = []
+        self._artifact_labels: list[QtWidgets.QLabel] = []
         self._recent_buttons: list[QtWidgets.QPushButton] = []
 
         self.title_label = QtWidgets.QLabel()
@@ -68,6 +70,16 @@ class HomeView(QtWidgets.QWidget):
         self._summary_layout = QtWidgets.QVBoxLayout(summary_group)
         layout.addWidget(summary_group)
 
+        health_group = QtWidgets.QGroupBox()
+        health_group.setTitle("Repository Health")
+        self._health_layout = QtWidgets.QVBoxLayout(health_group)
+        layout.addWidget(health_group)
+
+        artifact_group = QtWidgets.QGroupBox()
+        artifact_group.setTitle("Artifact Usage")
+        self._artifact_layout = QtWidgets.QVBoxLayout(artifact_group)
+        layout.addWidget(artifact_group)
+
         recent_group = QtWidgets.QGroupBox()
         recent_group.setTitle("Recent Repositories")
         self._recent_layout = QtWidgets.QVBoxLayout(recent_group)
@@ -101,6 +113,8 @@ class HomeView(QtWidgets.QWidget):
             self.path_status_label.setText("Enter a folder path to open or initialize.")
         self.call_to_action_label.setText(state.call_to_action)
         self._apply_summary_items(state.highlights)
+        self._apply_item_labels(self._health_layout, self._health_labels, state.health_items)
+        self._apply_item_labels(self._artifact_layout, self._artifact_labels, state.artifact_items)
         self._apply_recent_repositories(state.recent_repositories)
 
     def _apply_summary_items(self, items: tuple[SummaryItem, ...]) -> None:
@@ -115,6 +129,25 @@ class HomeView(QtWidgets.QWidget):
             label.setVisible(True)
 
         for label in self._summary_labels[len(items):]:
+            label.setVisible(False)
+
+    def _apply_item_labels(
+        self,
+        layout,
+        labels: list[QtWidgets.QLabel],
+        items: tuple[SummaryItem, ...],
+    ) -> None:
+        for index, item in enumerate(items):
+            if index >= len(labels):
+                label = QtWidgets.QLabel()
+                label.setWordWrap(True)
+                labels.append(label)
+                layout.addWidget(label)
+            label = labels[index]
+            label.setText(f"{item.label}: {item.value}")
+            label.setVisible(True)
+
+        for label in labels[len(items):]:
             label.setVisible(False)
 
     def _apply_recent_repositories(self, repositories: tuple[RecentRepository, ...]) -> None:

@@ -5,6 +5,8 @@ from difflib import unified_diff
 from pathlib import Path
 from typing import Literal
 
+from lit.artifact_store import ArtifactStore
+from lit.doctor import run_doctor
 from lit.refs import branch_name_from_ref
 from lit.repository import BranchRecord, Repository, StatusReport, TrackedFile
 from lit.state import MergeState, OperationState, RebaseState
@@ -13,6 +15,7 @@ from lit_gui.contracts import (
     BranchSummary,
     BranchesViewState,
     ChangedPath,
+    CheckpointSummary,
     ChangesViewState,
     CommitSummary,
     DetailPaneState,
@@ -20,6 +23,7 @@ from lit_gui.contracts import (
     FilesViewState,
     HistoryViewState,
     HomeViewState,
+    LineageSummary,
     NavigationTarget,
     OperationSummary,
     RecentRepository,
@@ -72,10 +76,18 @@ def build_snapshot(
 
     status = repository.status()
     operation = repository.current_operation()
+    checkpoints = _build_checkpoint_summaries(repository)
+    lineages = _build_lineage_summaries(repository)
+    doctor_report = run_doctor(repository.root)
+    artifact_usage = ArtifactStore().usage_report([repository.root])
+    head_verification = _head_verification_summary(repository)
     descriptor = _build_repository_descriptor(
         repository=repository,
         status=status,
         operation=operation,
+        doctor_report=doctor_report,
+        artifact_usage=artifact_usage,
+        head_verification=head_verification,
     )
     commits = _build_commit_summaries(repository)
     branches = _build_branch_summaries(repository)
@@ -124,6 +136,11 @@ def build_snapshot(
         home=_build_home_view(
             repository=repository,
             descriptor=descriptor,
+            checkpoints=checkpoints,
+            lineages=lineages,
+            doctor_report=doctor_report,
+            artifact_usage=artifact_usage,
+            head_verification=head_verification,
             recent=recent,
             feedback=feedback,
         ),
@@ -141,6 +158,7 @@ def build_snapshot(
             repository=repository,
             descriptor=descriptor,
             commits=commits,
+            checkpoints=checkpoints,
             selected_commit=normalized.commit_id,
             selected_path=normalized.commit_path,
             feedback=feedback,
@@ -151,6 +169,7 @@ def build_snapshot(
             status=status,
             operation=operation,
             branches=branches,
+            lineages=lineages,
             selected_branch=normalized.branch_name,
             restore_suggestion=_restore_suggestion(
                 selected_change=normalized.change_path,
@@ -311,6 +330,9 @@ def _build_repository_descriptor(
     repository: Repository,
     status: StatusReport,
     operation: OperationState | None,
+    doctor_report,
+    artifact_usage,
+    head_verification,
 ) -> RepositoryDescriptor:
     operation_summary = _operation_summary(operation)
     return RepositoryDescriptor(
@@ -318,6 +340,18 @@ def _build_repository_descriptor(
         root=repository.root,
         current_branch=repository.current_branch_name(),
         head_commit=repository.current_commit_id(),
+        current_lineage=repository.current_branch_name() or repository.config.default_branch,
+        latest_safe_checkpoint_id=repository.latest_safe_checkpoint_id(
+            lineage_id=repository.current_branch_name()
+        )
+        or repository.latest_safe_checkpoint_id(),
+        verification_status="never_verified" if head_verification is None else head_verification.status.value,
+        verification_summary=""
+        if head_verification is None
+        else head_verification.summary or "",
+        healthy=doctor_report.healthy,
+        health_summary=_doctor_summary(doctor_report),
+        artifact_usage_summary=_artifact_usage_summary(artifact_usage),
         status_text=_repository_status_text(repository, status, operation),
         is_lit_repository=True,
         operation=operation_summary,
@@ -329,13 +363,18 @@ def _build_home_view(
     *,
     repository: Repository,
     descriptor: RepositoryDescriptor,
+    checkpoints: tuple[CheckpointSummary, ...],
+    lineages: tuple[LineageSummary, ...],
+    doctor_report,
+    artifact_usage,
+    head_verification,
     recent: tuple[RecentRepository, ...],
     feedback: SnapshotFeedback | None,
 ) -> HomeViewState:
     guidance_title, guidance_body = _guidance(
         base=(
-            "Use Changes to stage and commit work, History to inspect revisions, "
-            "and Branches for checkout, merge, or rebase."
+            "Use Changes to stage and commit work, History to inspect provenance and checkpoints, "
+            "and Branches to review lineage state, promotion risk, or rollback anchors."
         ),
         feedback=feedback,
     )
@@ -349,11 +388,29 @@ def _build_home_view(
         highlights=(
             SummaryItem(label="Current folder", value=str(repository.root)),
             SummaryItem(label="Repository status", value=descriptor.status_text),
-            SummaryItem(label="Branch", value=branch_label),
+            SummaryItem(label="Lineage", value=descriptor.current_lineage or branch_label),
             SummaryItem(label="HEAD", value=commit_label),
+            SummaryItem(label="Latest safe checkpoint", value=descriptor.latest_safe_checkpoint_id or "none"),
+            SummaryItem(label="Verification", value=descriptor.verification_status),
+            SummaryItem(label="Health", value="healthy" if descriptor.healthy else "attention"),
+        ),
+        checkpoints=checkpoints,
+        lineages=lineages,
+        health_items=(
+            SummaryItem(label="Repository health", value="healthy" if doctor_report.healthy else "attention"),
+            SummaryItem(label="Findings", value=str(len(doctor_report.findings))),
+            SummaryItem(label="Latest safe checkpoint", value=descriptor.latest_safe_checkpoint_id or "none"),
+        ),
+        artifact_items=(
+            SummaryItem(label="Objects", value=str(artifact_usage.total_objects)),
+            SummaryItem(label="Linked objects", value=str(artifact_usage.linked_objects)),
+            SummaryItem(label="Reclaimable bytes", value=str(artifact_usage.reclaimable_bytes)),
         ),
         recent_repositories=recent,
-        call_to_action="Use Changes to stage work or Branches to switch context.",
+        call_to_action=(
+            f"Latest safe checkpoint: {descriptor.latest_safe_checkpoint_id or 'none'}. "
+            "Inspect History for provenance and verification before promoting or rolling back."
+        ),
         detail=DetailPaneState.placeholder(
             selection_title="Selected repository",
             selection_body=descriptor.name,
@@ -361,6 +418,11 @@ def _build_home_view(
             metadata_body=(
                 f"Branch: {branch_label}\n"
                 f"HEAD: {commit_label}\n"
+                f"Current lineage: {descriptor.current_lineage or '-'}\n"
+                f"Latest safe checkpoint: {descriptor.latest_safe_checkpoint_id or '-'}\n"
+                f"Verification: {descriptor.verification_status} {descriptor.verification_summary}\n"
+                f"Health: {descriptor.health_summary}\n"
+                f"Artifact usage: {descriptor.artifact_usage_summary}\n"
                 f"Root: {repository.root}"
             ),
             guidance_title=guidance_title,
@@ -417,6 +479,7 @@ def _build_history_view(
     repository: Repository,
     descriptor: RepositoryDescriptor,
     commits: tuple[CommitSummary, ...],
+    checkpoints: tuple[CheckpointSummary, ...],
     selected_commit: str | None,
     selected_path: str | None,
     feedback: SnapshotFeedback | None,
@@ -434,9 +497,11 @@ def _build_history_view(
         highlights=(
             SummaryItem(label="Visible commits", value=str(len(commits))),
             SummaryItem(label="Selected commit", value=selected_commit[:12] if selected_commit else "None"),
+            SummaryItem(label="Checkpoint count", value=str(len(checkpoints))),
             SummaryItem(label="Selected file", value=selected_path or "None"),
         ),
         commits=commits,
+        checkpoints=checkpoints,
         selected_commit=selected_commit,
         selected_path=selected_path,
         detail=DetailPaneState.placeholder(
@@ -457,11 +522,17 @@ def _build_branches_view(
     status: StatusReport,
     operation: OperationState | None,
     branches: tuple[BranchSummary, ...],
+    lineages: tuple[LineageSummary, ...],
     selected_branch: str | None,
     restore_suggestion: str | None,
     feedback: SnapshotFeedback | None,
 ) -> BranchesViewState:
     selected = next((branch for branch in branches if branch.name == selected_branch), None)
+    selected_lineage = next(
+        (lineage for lineage in lineages if lineage.lineage_id == selected_branch),
+        None,
+    )
+    promotion_preview = _promotion_preview(repository, selected_lineage, descriptor)
     can_checkout = _can_checkout(status, operation)
     can_merge = _can_merge(repository, status, operation)
     can_rebase = _can_rebase(repository, status, operation)
@@ -473,6 +544,8 @@ def _build_branches_view(
             can_checkout=can_checkout,
             can_merge=can_merge,
             can_rebase=can_rebase,
+            latest_safe_checkpoint_id=descriptor.latest_safe_checkpoint_id,
+            promotion_preview=promotion_preview,
         ),
         feedback=feedback,
     )
@@ -483,12 +556,14 @@ def _build_branches_view(
         context=descriptor,
         highlights=(
             SummaryItem(label="Current branch", value=descriptor.current_branch or "detached"),
+            SummaryItem(label="Current lineage", value=descriptor.current_lineage or "detached"),
             SummaryItem(label="Branch count", value=str(len(branches))),
+            SummaryItem(label="Active lineages", value=str(len([lineage for lineage in lineages if lineage.status == 'active']))),
             SummaryItem(label="Checkout readiness", value="Ready" if can_checkout else "Blocked"),
-            SummaryItem(label="Merge readiness", value="Ready" if can_merge else "Blocked"),
-            SummaryItem(label="Rebase readiness", value="Ready" if can_rebase else "Blocked"),
+            SummaryItem(label="Rollback anchor", value=descriptor.latest_safe_checkpoint_id or "none"),
         ),
         branches=branches,
+        lineages=lineages,
         selected_branch=selected_branch,
         can_checkout=can_checkout,
         can_merge=can_merge,
@@ -504,10 +579,12 @@ def _build_branches_view(
             metadata_title=_branch_metadata_title(operation),
             metadata_body=_branch_metadata(
                 selected=selected,
+                selected_lineage=selected_lineage,
                 descriptor=descriptor,
                 can_checkout=can_checkout,
                 can_merge=can_merge,
                 can_rebase=can_rebase,
+                promotion_preview=promotion_preview,
             ),
             guidance_title=guidance_title,
             guidance_body=guidance_body,
@@ -610,12 +687,18 @@ def _build_change_lists(status: StatusReport) -> tuple[tuple[ChangedPath, ...], 
 def _build_commit_summaries(repository: Repository) -> tuple[CommitSummary, ...]:
     commits: list[CommitSummary] = []
     for commit_id, record in repository.iter_history():
+        revision = repository.get_revision(commit_id)
         commits.append(
             CommitSummary(
                 commit_id=commit_id,
                 message=record.summary,
                 author=record.metadata.author,
                 committed_at=record.metadata.committed_at or "",
+                lineage_id=revision.provenance.lineage_id,
+                verification_status=revision.provenance.verification_status.value,
+                verification_summary=revision.provenance.verification_summary or "",
+                checkpoint_ids=revision.checkpoint_ids,
+                artifact_ids=revision.artifact_ids,
                 changed_paths=_changed_paths_for_commit(repository, commit_id),
             )
         )
@@ -631,6 +714,51 @@ def _build_branch_summaries(repository: Repository) -> tuple[BranchSummary, ...]
             note=_branch_note(branch),
         )
         for branch in repository.list_branches()
+    )
+
+
+def _build_checkpoint_summaries(repository: Repository) -> tuple[CheckpointSummary, ...]:
+    return tuple(
+        CheckpointSummary(
+            checkpoint_id=checkpoint.checkpoint_id or "",
+            revision_id=checkpoint.revision_id,
+            name=checkpoint.name,
+            note=checkpoint.note,
+            safe=checkpoint.safe,
+            pinned=checkpoint.pinned,
+            approval_state=checkpoint.approval_state.value,
+            verification_status=checkpoint.provenance.verification_status.value,
+            lineage_id=checkpoint.provenance.lineage_id,
+        )
+        for checkpoint in repository.list_checkpoints()
+    )
+
+
+def _build_lineage_summaries(repository: Repository) -> tuple[LineageSummary, ...]:
+    return tuple(
+        LineageSummary(
+            lineage_id=lineage.lineage_id,
+            head_revision=lineage.head_revision,
+            base_checkpoint_id=lineage.base_checkpoint_id,
+            status=lineage.status.value,
+            title=lineage.title,
+            description=lineage.description,
+            owned_paths=lineage.owned_paths,
+            checkpoint_ids=lineage.checkpoint_ids,
+        )
+        for lineage in repository.list_managed_lineages()
+    )
+
+
+def _head_verification_summary(repository: Repository):
+    revision = repository.current_revision()
+    if revision is None:
+        return None
+    return repository.verification_status(
+        owner_kind="revision",
+        owner_id=revision.revision_id,
+        linked_verification_id=revision.verification_id,
+        state_fingerprint=revision.tree,
     )
 
 
@@ -890,14 +1018,31 @@ def _commit_metadata(
         return "No commit metadata available."
 
     record = repository.read_commit(selected.commit_id)
+    revision = repository.get_revision(selected.commit_id)
     parents = ", ".join(parent[:12] for parent in record.parents) or "none"
     committed_at = selected.committed_at or "unknown"
+    provenance = revision.provenance
     lines = [
         f"Commit: {selected.commit_id}",
         f"Message: {selected.message or '(empty commit message)'}",
         f"Author: {selected.author or 'lit'}",
         f"Committed at: {committed_at}",
         f"Parents: {parents}",
+        f"Lineage: {provenance.lineage_id or '-'}",
+        f"Verification status: {provenance.verification_status.value}",
+        f"Verification summary: {provenance.verification_summary or '-'}",
+        f"Verification id: {revision.verification_id or '-'}",
+        f"Actor: {provenance.actor_role}:{provenance.actor_id}",
+        f"Prompt template: {provenance.prompt_template or '-'}",
+        f"Agent family: {provenance.agent_family or '-'}",
+        f"Run id: {provenance.run_id or '-'}",
+        f"Block id: {provenance.block_id or '-'}",
+        f"Step id: {provenance.step_id or '-'}",
+        f"Origin commit: {provenance.origin_commit or '-'}",
+        f"Rewritten from: {provenance.rewritten_from or '-'}",
+        f"Promoted from: {provenance.promoted_from or '-'}",
+        f"Checkpoints: {', '.join(revision.checkpoint_ids) or 'none'}",
+        f"Artifacts: {', '.join(revision.artifact_ids) or 'none'}",
         f"Changed paths: {', '.join(selected.changed_paths) or 'none'}",
     ]
     if selected_path is not None:
@@ -935,6 +1080,8 @@ def _branch_guidance(
     can_checkout: bool,
     can_merge: bool,
     can_rebase: bool,
+    latest_safe_checkpoint_id: str | None,
+    promotion_preview: str,
 ) -> str:
     if operation is not None:
         conflicts = operation.state.conflicts
@@ -975,7 +1122,11 @@ def _branch_guidance(
             "Checkout is available, but untracked files can still block a specific target. "
             "Merge and rebase require a fully clean tree, including untracked paths."
         )
-    return "Create a branch from HEAD, checkout another local branch or commit, restore a path, or start a merge or rebase."
+    return (
+        "Create a branch from HEAD, checkout another local branch or commit, restore a path, "
+        f"or start a merge or rebase. Latest safe checkpoint: {latest_safe_checkpoint_id or 'none'}. "
+        f"{promotion_preview}"
+    )
 
 
 def _can_checkout(status: StatusReport, operation: OperationState | None) -> bool:
@@ -1059,15 +1210,20 @@ def _branch_selection_body(
 def _branch_metadata(
     *,
     selected: BranchSummary | None,
+    selected_lineage: LineageSummary | None,
     descriptor: RepositoryDescriptor,
     can_checkout: bool,
     can_merge: bool,
     can_rebase: bool,
+    promotion_preview: str,
 ) -> str:
     head_label = descriptor.head_commit or "unborn"
     lines = [
         f"Current branch: {descriptor.current_branch or 'detached'}",
+        f"Current lineage: {descriptor.current_lineage or 'detached'}",
         f"HEAD: {head_label}",
+        f"Latest safe checkpoint: {descriptor.latest_safe_checkpoint_id or 'none'}",
+        f"Verification: {descriptor.verification_status} {descriptor.verification_summary}".rstrip(),
         f"Checkout: {'ready' if can_checkout else 'blocked'}",
         f"Merge: {'ready' if can_merge else 'blocked'}",
         f"Rebase: {'ready' if can_rebase else 'blocked'}",
@@ -1088,6 +1244,17 @@ def _branch_metadata(
                 f"Selected note: {note}",
             )
         )
+    if selected_lineage is not None:
+        lines.extend(
+            (
+                f"Selected lineage: {selected_lineage.lineage_id}",
+                f"Lineage status: {selected_lineage.status}",
+                f"Base checkpoint: {selected_lineage.base_checkpoint_id or 'none'}",
+                f"Owned paths: {', '.join(selected_lineage.owned_paths) or 'none'}",
+                f"Lineage checkpoints: {', '.join(selected_lineage.checkpoint_ids) or 'none'}",
+            )
+        )
+    lines.append(f"Promotion preview: {promotion_preview}")
     return "\n".join(lines)
 
 
@@ -1101,6 +1268,46 @@ def _restore_suggestion(
     if operation is not None and operation.state.conflicts:
         return operation.state.conflicts[0]
     return None
+
+
+def _promotion_preview(
+    repository: Repository,
+    selected_lineage: LineageSummary | None,
+    descriptor: RepositoryDescriptor,
+) -> str:
+    if selected_lineage is None:
+        return "Select a lineage-backed branch to preview promotion."
+    current_lineage = descriptor.current_lineage
+    if current_lineage is None or selected_lineage.lineage_id == current_lineage:
+        return "Select another lineage to preview promotion into the current lineage."
+    try:
+        preview = repository.preview_promotion_conflicts(
+            selected_lineage.lineage_id,
+            current_lineage,
+        )
+    except (FileNotFoundError, RuntimeError, ValueError):
+        return "Promotion preview unavailable for the selected branch."
+    if preview.can_promote:
+        return (
+            f"{selected_lineage.lineage_id} can promote into {preview.destination_lineage_id} "
+            f"from baseline {preview.baseline_revision[:12] if preview.baseline_revision else 'none'}."
+        )
+    return (
+        f"{selected_lineage.lineage_id} promotion into {preview.destination_lineage_id} is blocked by "
+        f"{len(preview.conflicts)} conflict(s)."
+    )
+
+
+def _doctor_summary(report) -> str:
+    status = "healthy" if report.healthy else "attention"
+    return f"{status}; findings={len(report.findings)}"
+
+
+def _artifact_usage_summary(report) -> str:
+    return (
+        f"objects={report.total_objects}; linked={report.linked_objects}; "
+        f"reclaimable_bytes={report.reclaimable_bytes}"
+    )
 
 
 def _merge_target_label(state: MergeState) -> str:

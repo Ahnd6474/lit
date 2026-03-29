@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from lit.refs import branch_ref
 from lit.repository import Repository
+from lit.storage import read_json, write_json
 from lit_gui.contracts import NavigationTarget
 from lit_gui.session import LitRepositorySession
 
@@ -167,6 +168,47 @@ def test_rebase_conflict_snapshot_reports_operation_and_supports_abort(tmp_path:
     assert snapshot.repository.status_text == "Working tree clean."
     assert (tmp_path / "story.txt").read_text(encoding="utf-8") == "feature change\n"
     assert "Rebase state cleared." in snapshot.changes.detail.guidance.body
+
+
+def test_session_release_surface_methods_refresh_checkpoint_verification_and_lineage_state(
+    tmp_path: Path,
+) -> None:
+    repo = Repository.create(tmp_path)
+    story = tmp_path / "story.txt"
+    story.write_text("base\n", encoding="utf-8")
+    head_commit = _commit_all(repo, "base")
+    config = read_json(repo.layout.config, default={}) or {}
+    config["verification_commands"] = [
+        {
+            "name": "smoke",
+            "command": [sys.executable, "-c", "print('ok')"],
+            "command_identity": "session-smoke",
+        }
+    ]
+    write_json(repo.layout.config, config)
+
+    session = LitRepositorySession(tmp_path)
+    session.open_repository(tmp_path)
+
+    snapshot = session.create_checkpoint(name="safe-base")
+    assert snapshot.repository is not None
+    assert snapshot.repository.latest_safe_checkpoint_id is not None
+    assert any(item.label == "Latest safe checkpoint" for item in snapshot.home.highlights)
+
+    snapshot = session.verify_revision(definition_name="smoke")
+    assert snapshot.repository is not None
+    assert snapshot.repository.verification_status in {"passed", "cached_pass"}
+    assert "verification" in snapshot.history.detail.metadata.body.lower()
+
+    snapshot = session.create_lineage("feature-a", owned_paths=("src/lit",))
+    assert any(lineage.lineage_id == "feature-a" for lineage in snapshot.branches.lineages)
+
+    snapshot = session.preview_lineage_promotion("feature-a")
+    assert "promotion preview" in snapshot.branches.detail.guidance.body.lower()
+
+    snapshot = session.rollback_to_checkpoint(snapshot.repository.latest_safe_checkpoint_id)
+    assert snapshot.history.selected_commit == head_commit
+    assert "rolled back" in snapshot.history.detail.guidance.body.lower()
 
 
 def _commit_all(repository: Repository, message: str) -> str:

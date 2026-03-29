@@ -36,6 +36,7 @@ class BranchesView(QtWidgets.QWidget):
         self._on_refresh_requested = on_refresh_requested
         self._summary_labels: list[QtWidgets.QLabel] = []
         self._branch_buttons: list[QtWidgets.QPushButton] = []
+        self._lineage_buttons: list[QtWidgets.QPushButton] = []
         self._conflict_buttons: list[QtWidgets.QPushButton] = []
 
         self.title_label = QtWidgets.QLabel()
@@ -57,9 +58,19 @@ class BranchesView(QtWidgets.QWidget):
         self.manual_state_label = QtWidgets.QLabel()
         self.manual_state_label.setWordWrap(True)
         self._manual_state_layout.addWidget(self.manual_state_label)
+        self.promotion_preview_label = QtWidgets.QLabel()
+        self.promotion_preview_label.setWordWrap(True)
+        self._manual_state_layout.addWidget(self.promotion_preview_label)
         self._conflict_empty_label = QtWidgets.QLabel("No conflicted paths recorded.")
         self._conflict_empty_label.setWordWrap(True)
         self._manual_state_layout.addWidget(self._conflict_empty_label)
+
+        self.lineage_group = QtWidgets.QGroupBox()
+        self.lineage_group.setTitle("Lineages")
+        self._lineage_layout = QtWidgets.QVBoxLayout(self.lineage_group)
+        self._lineage_empty_label = QtWidgets.QLabel("No lineage records loaded.")
+        self._lineage_empty_label.setWordWrap(True)
+        self._lineage_layout.addWidget(self._lineage_empty_label)
 
         self.create_group = QtWidgets.QGroupBox()
         self.create_group.setTitle("Create Branch")
@@ -140,6 +151,7 @@ class BranchesView(QtWidgets.QWidget):
         content_row = QtWidgets.QHBoxLayout()
         left_column = QtWidgets.QVBoxLayout()
         left_column.addWidget(self.branch_list_group)
+        left_column.addWidget(self.lineage_group)
         left_column.addWidget(self.manual_state_group)
         left_column.addStretch(1)
         content_row.addLayout(left_column, 1)
@@ -175,6 +187,10 @@ class BranchesView(QtWidgets.QWidget):
     def conflict_buttons(self) -> tuple[QtWidgets.QPushButton, ...]:
         return tuple(self._conflict_buttons)
 
+    @property
+    def lineage_buttons(self) -> tuple[QtWidgets.QPushButton, ...]:
+        return tuple(self._lineage_buttons)
+
     def apply_state(self, state: BranchesViewState) -> None:
         self.state = state
         self.title_label.setText(state.title)
@@ -190,6 +206,7 @@ class BranchesView(QtWidgets.QWidget):
         )
         self.attention_label.setText(context_attention)
         self.manual_state_label.setText(self._manual_state_text())
+        self.promotion_preview_label.setText(self._promotion_preview_text())
         self.create_hint_label.setText(
             "Create a local branch from HEAD or another revision. The start point defaults to HEAD."
         )
@@ -200,6 +217,7 @@ class BranchesView(QtWidgets.QWidget):
 
         self._apply_summary_items(state.highlights)
         self._apply_branches(state.branches, state.selected_branch)
+        self._apply_lineages(state.lineages, state.selected_branch)
         self._apply_conflicts()
 
         if state.selected_branch is not None and not self.checkout_panel.revision_input.text().strip():
@@ -273,6 +291,28 @@ class BranchesView(QtWidgets.QWidget):
             button.setVisible(True)
 
         for button in self._conflict_buttons[len(conflicts):]:
+            button.setVisible(False)
+
+    def _apply_lineages(self, lineages, selected_branch: str | None) -> None:
+        self.lineage_group.setTitle(f"Lineages ({len(lineages)})")
+        self._lineage_empty_label.setVisible(not lineages)
+
+        for index, lineage in enumerate(lineages):
+            if index >= len(self._lineage_buttons):
+                button = QtWidgets.QPushButton()
+                button.setCheckable(False)
+                self._lineage_buttons.append(button)
+                self._lineage_layout.addWidget(button)
+            button = self._lineage_buttons[index]
+            marker = "* " if lineage.lineage_id == selected_branch else ""
+            button.setText(
+                f"{marker}{lineage.lineage_id} [{lineage.status}] "
+                f"base={lineage.base_checkpoint_id or 'none'} "
+                f"owned={', '.join(lineage.owned_paths) or '-'}"
+            )
+            button.setVisible(True)
+
+        for button in self._lineage_buttons[len(lineages):]:
             button.setVisible(False)
 
     def _sync_actions(self) -> None:
@@ -350,6 +390,15 @@ class BranchesView(QtWidgets.QWidget):
         if self.state.context is None:
             return "No repository loaded."
         return self.state.context.attention or self.state.context.status_text
+
+    def _promotion_preview_text(self) -> str:
+        metadata = self.state.detail.metadata.body
+        for line in metadata.splitlines():
+            if line.startswith("Promotion preview:"):
+                return line
+        if self.state.context is None:
+            return "Promotion preview: open a repository first."
+        return "Promotion preview: select a lineage-backed branch to inspect promotion readiness."
 
     def _select_branch_button(self, button: QtWidgets.QPushButton) -> None:
         branch_name = getattr(button, "_target_branch", None)

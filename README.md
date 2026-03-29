@@ -40,6 +40,8 @@ Base CLI install:
 python -m pip install -e .
 ```
 
+If the `lit` script directory is not on your `PATH`, use `python -m lit ...` instead of `lit ...`.
+
 Optional desktop GUI install:
 
 ```bash
@@ -54,7 +56,7 @@ That installs the `lit` console command. The GUI entrypoint is `lit-gui` when th
 mkdir demo
 cd demo
 lit init
-printf "hello\n" > note.txt
+python -c "from pathlib import Path; Path('note.txt').write_text('hello\\n', encoding='utf-8')"
 lit add note.txt
 lit commit -m "Create first checkpoint"
 lit checkpoint create --name safe-start
@@ -88,6 +90,8 @@ lit-gui
 # or
 python -m lit_gui.app
 ```
+
+If `PySide6` is not installed, the desktop entrypoint will fail until the optional `gui` extra is installed.
 
 The desktop shell uses the same backend records as the CLI and exposes:
 
@@ -133,6 +137,12 @@ python -m pytest
 ```
 
 You can also configure repository verification commands and record them with `lit verify run`.
+
+The closeout pass verified:
+
+- `python -m pytest`
+- `python -m pip install -e .`
+- `python -m lit --help`
 
 ## Current Limitations
 

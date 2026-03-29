@@ -3,17 +3,18 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>lit | local git</title>
+    <title>lit | local execution vcs</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <main class="page">
       <section class="hero">
-        <p class="eyebrow">local git</p>
-        <h1>lit is a lightweight, local-only version control tool.</h1>
+        <p class="eyebrow">local execution vcs</p>
+        <h1>lit is a local execution VCS for autonomous coding workflows on one machine.</h1>
         <p class="lead">
-          Use it for fast local checkpoints on one computer. No account, no server,
-          no sync, no remote, and no network requirement.
+          Use it for safe checkpoints, rollback, provenance, verification-aware history,
+          lineage isolation, and local artifacts. No account, no server, no sync,
+          no remote, and no network requirement.
         </p>
         <div class="hero-actions">
           <a href="#quick-start">Quick Start</a>
@@ -24,13 +25,16 @@
       <section class="panel">
         <h2>Why use lit?</h2>
         <p>
-          `lit` keeps the familiar shape of Git for local work, but drops everything
-          related to remotes and collaboration. It is useful when you want simple,
-          offline checkpoints for code, notes, scripts, or experiments on a single machine.
+          `lit` keeps a few familiar Git-like verbs for local work, but the product centers
+          safe checkpoints, rollback, provenance, verification, and lineage isolation for
+          long-running autonomous workflows on one machine.
         </p>
         <ul>
           <li>Local-only and offline-only by design</li>
-          <li>Simple CLI with real branch, merge, and rebase workflows</li>
+          <li>Safe checkpoints and rollback anchors</li>
+          <li>Structured provenance and verification status</li>
+          <li>Lineage isolation for parallel local workers</li>
+          <li>CLI and optional desktop GUI on one shared backend</li>
           <li>No `push`, `pull`, `fetch`, `clone`, or hosted service</li>
           <li>No account, login, cloud, daemon, or background sync</li>
         </ul>
@@ -42,8 +46,8 @@
           <p>`lit` targets Python 3.12+.</p>
           <pre><code>python -m pip install -e .</code></pre>
           <p>
-            That installs the `lit` command from this repository. You can then run
-            `lit ...` or `python -m lit ...`.
+            That installs the `lit` command from this repository. If the script directory
+            is not on your <code>PATH</code>, use <code>python -m lit ...</code>.
           </p>
         </article>
 
@@ -52,11 +56,13 @@
           <pre><code>mkdir demo
 cd demo
 lit init
-printf "hello\n" &gt; note.txt
+python -c "from pathlib import Path; Path('note.txt').write_text('hello\n', encoding='utf-8')"
 lit add note.txt
 lit commit -m "Create first checkpoint"
+lit checkpoint create --name safe-start
 lit status
-lit log</code></pre>
+lit log
+lit doctor</code></pre>
         </article>
       </section>
 
@@ -84,6 +90,13 @@ lit log</code></pre>
               <tr><td><code>lit merge --abort</code></td><td>Clear merge state and restore the pre-merge tree.</td></tr>
               <tr><td><code>lit rebase &lt;rev&gt;</code></td><td>Rebase the current branch onto another local revision.</td></tr>
               <tr><td><code>lit rebase --abort</code></td><td>Clear rebase state and restore the original branch tip.</td></tr>
+              <tr><td><code>lit checkpoint ...</code></td><td>Create, list, inspect, and pin safe checkpoints.</td></tr>
+              <tr><td><code>lit rollback ...</code></td><td>Restore the latest safe checkpoint or a selected checkpoint.</td></tr>
+              <tr><td><code>lit verify ...</code></td><td>Run or replay verification and inspect cached status.</td></tr>
+              <tr><td><code>lit lineage ...</code></td><td>Create, inspect, switch, preview, promote, or discard lineages.</td></tr>
+              <tr><td><code>lit artifact ...</code></td><td>Inspect artifacts, linkage, and storage usage.</td></tr>
+              <tr><td><code>lit doctor</code></td><td>Inspect health, locks, and unfinished transactions.</td></tr>
+              <tr><td><code>lit export</code></td><td>Build a Git-facing export plan with provenance mapping.</td></tr>
             </tbody>
           </table>
         </div>
@@ -95,15 +108,13 @@ lit log</code></pre>
           <pre><code>lit init
 lit add src
 lit commit -m "Save working version"
-lit branch feature
-lit checkout feature
-lit add src
-lit commit -m "Work on feature"
-lit checkout main
-lit merge feature
-lit checkout feature
-lit rebase main
-lit restore docs --source HEAD</code></pre>
+lit checkpoint create --name safe-base
+lit lineage create worker-a --owned-path src/lit
+lit lineage switch worker-a
+lit verify status
+lit lineage switch main
+lit lineage promote worker-a --preview
+lit rollback</code></pre>
         </article>
 
         <article class="panel">
@@ -119,7 +130,8 @@ lit restore docs --source HEAD</code></pre>
             <li>No remote repositories</li>
             <li>No `push`, `pull`, `fetch`, or `clone`</li>
             <li>No collaboration or team workflow</li>
-            <li>Simpler merge and rebase behavior</li>
+            <li>Safe checkpoints and rollback are first-class</li>
+            <li>Verification, provenance, lineages, and artifacts are product features</li>
           </ul>
         </article>
       </section>
@@ -142,11 +154,10 @@ lit restore docs --source HEAD</code></pre>
         <article class="panel" id="limitations">
           <h2>Limitations and non-goals</h2>
           <ul>
-            <li>`lit diff` compares the working tree to the current commit only.</li>
-            <li>`lit log` follows first-parent history from <code>HEAD</code>.</li>
-            <li>Merge and rebase are real but simplified for ordinary local cases.</li>
-            <li>Conflicts are manual: `lit` writes conflict markers into files.</li>
-            <li>Checkout requires a clean index and tracked working tree.</li>
+            <li>`lit export` is a Git bridge, not a full Git transport or object-compatibility layer.</li>
+            <li>Conflict handling is manual: `lit` writes markers and preserves state.</li>
+            <li>The desktop UI is optional and requires the <code>gui</code> dependency extra.</li>
+            <li>The product is intentionally scoped to one-machine local execution workflows.</li>
             <li>Remote hosting, collaboration, cloud sync, and network workflows are non-goals.</li>
           </ul>
         </article>

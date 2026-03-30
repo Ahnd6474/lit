@@ -1,4 +1,4 @@
-"""Canonical lit v1 contracts for autonomous local workflows. Persisted revision, checkpoint, lineage, verification, artifact, and operation records serialize only through these versioned dataclasses and layout helpers; readers must tolerate legacy v0 commit JSON and absent fields. CLI, GUI, export, and future Jakal Flow adapters talk to a narrow backend API and must not hardcode .lit paths or invent metadata keys independently."""
+"""Machine-facing lit CLI and backend surfaces serialize through typed contracts here. JSON keys, exit codes, provenance input fields, workspace identity fields, step policy fields, and operation projection fields are stable automation interfaces; commands may add human rendering, but they must not invent divergent shapes or infer workspace state from filesystem layout alone."""
 
 from __future__ import annotations
 
@@ -214,6 +214,73 @@ class ProvenanceRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class ProvenanceInput:
+    actor_role: str | None = None
+    actor_id: str | None = None
+    prompt_template: str | None = None
+    agent_family: str | None = None
+    run_id: str | None = None
+    block_id: str | None = None
+    step_id: str | None = None
+    lineage_id: str | None = None
+    committed_at: str | None = None
+    origin_commit: str | None = None
+    rewritten_from: str | None = None
+    promoted_from: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            key: value
+            for key, value in _serialize_value(self).items()
+            if value is not None
+        }
+
+    def to_record(
+        self,
+        *,
+        fallback: ProvenanceRecord | None = None,
+    ) -> ProvenanceRecord:
+        base = fallback or ProvenanceRecord()
+        return ProvenanceRecord(
+            actor_role=self.actor_role or base.actor_role,
+            actor_id=self.actor_id or base.actor_id,
+            prompt_template=self.prompt_template or base.prompt_template,
+            agent_family=self.agent_family or base.agent_family,
+            run_id=self.run_id or base.run_id,
+            block_id=self.block_id or base.block_id,
+            step_id=self.step_id or base.step_id,
+            lineage_id=self.lineage_id or base.lineage_id,
+            verification_status=base.verification_status,
+            verification_summary=base.verification_summary,
+            committed_at=self.committed_at or base.committed_at,
+            origin_commit=self.origin_commit or base.origin_commit,
+            rewritten_from=self.rewritten_from or base.rewritten_from,
+            promoted_from=self.promoted_from or base.promoted_from,
+        )
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object] | None) -> "ProvenanceInput":
+        if not data:
+            return cls()
+        raw_data = data.get("provenance")
+        source = raw_data if isinstance(raw_data, Mapping) else data
+        return cls(
+            actor_role=_optional_string(source.get("actor_role")),
+            actor_id=_optional_string(source.get("actor_id")),
+            prompt_template=_optional_string(source.get("prompt_template")),
+            agent_family=_optional_string(source.get("agent_family")),
+            run_id=_optional_string(source.get("run_id")),
+            block_id=_optional_string(source.get("block_id")),
+            step_id=_optional_string(source.get("step_id")),
+            lineage_id=_optional_string(source.get("lineage_id")),
+            committed_at=_optional_string(source.get("committed_at")),
+            origin_commit=_optional_string(source.get("origin_commit")),
+            rewritten_from=_optional_string(source.get("rewritten_from")),
+            promoted_from=_optional_string(source.get("promoted_from")),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class RevisionRecord:
     schema_version: int = DOMAIN_SCHEMA_VERSION
     revision_id: str | None = None
@@ -333,6 +400,103 @@ class LineageRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class WorkspaceRecord:
+    schema_version: int = DOMAIN_SCHEMA_VERSION
+    workspace_id: str | None = None
+    lineage_id: str | None = None
+    repository_root: str | None = None
+    workspace_root: str | None = None
+    head_revision: str | None = None
+    materialized_revision_id: str | None = None
+    base_checkpoint_id: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return _serialize_value(self)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object] | None) -> "WorkspaceRecord":
+        if not data:
+            return cls()
+        return cls(
+            schema_version=_default_schema_version(data),
+            workspace_id=_optional_string(data.get("workspace_id")),
+            lineage_id=_optional_string(data.get("lineage_id")),
+            repository_root=_optional_string(data.get("repository_root")),
+            workspace_root=_optional_string(data.get("workspace_root")),
+            head_revision=_optional_string(data.get("head_revision")),
+            materialized_revision_id=_optional_string(data.get("materialized_revision_id")),
+            base_checkpoint_id=_optional_string(data.get("base_checkpoint_id")),
+            created_at=_optional_string(data.get("created_at")),
+            updated_at=_optional_string(data.get("updated_at")),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class StepPolicyRecord:
+    schema_version: int = DOMAIN_SCHEMA_VERSION
+    step_id: str | None = None
+    owned_paths: tuple[str, ...] = ()
+    allow_owned_path_overlap_with: tuple[str, ...] = ()
+    require_checkpoint: bool = False
+    require_verification: bool = False
+    allow_empty_commit: bool = False
+
+    def to_dict(self) -> dict[str, object]:
+        return _serialize_value(self)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object] | None) -> "StepPolicyRecord":
+        if not data:
+            return cls()
+        return cls(
+            schema_version=_default_schema_version(data),
+            step_id=_optional_string(data.get("step_id")),
+            owned_paths=_string_tuple(data.get("owned_paths")),
+            allow_owned_path_overlap_with=_string_tuple(data.get("allow_owned_path_overlap_with")),
+            require_checkpoint=bool(data.get("require_checkpoint", False)),
+            require_verification=bool(data.get("require_verification", False)),
+            allow_empty_commit=bool(data.get("allow_empty_commit", False)),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class StepRecord:
+    schema_version: int = DOMAIN_SCHEMA_VERSION
+    step_id: str | None = None
+    run_id: str | None = None
+    block_id: str | None = None
+    lineage_id: str | None = None
+    workspace_id: str | None = None
+    head_revision: str | None = None
+    checkpoint_id: str | None = None
+    operation_ids: tuple[str, ...] = ()
+    policy: StepPolicyRecord = field(default_factory=StepPolicyRecord)
+
+    def to_dict(self) -> dict[str, object]:
+        return _serialize_value(self)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object] | None) -> "StepRecord":
+        if not data:
+            return cls()
+        raw_policy = data.get("policy")
+        return cls(
+            schema_version=_default_schema_version(data),
+            step_id=_optional_string(data.get("step_id")),
+            run_id=_optional_string(data.get("run_id")),
+            block_id=_optional_string(data.get("block_id")),
+            lineage_id=_optional_string(data.get("lineage_id")),
+            workspace_id=_optional_string(data.get("workspace_id")),
+            head_revision=_optional_string(data.get("head_revision")),
+            checkpoint_id=_optional_string(data.get("checkpoint_id")),
+            operation_ids=_string_tuple(data.get("operation_ids")),
+            policy=StepPolicyRecord.from_dict(raw_policy if isinstance(raw_policy, Mapping) else None),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class VerificationRecord:
     schema_version: int = DOMAIN_SCHEMA_VERSION
     verification_id: str | None = None
@@ -413,12 +577,15 @@ class OperationRecord:
     kind: OperationKind = OperationKind.COMMIT
     status: OperationStatus = OperationStatus.QUEUED
     repository_root: str | None = None
+    workspace_id: str | None = None
+    step_id: str | None = None
     lineage_id: str | None = None
     revision_id: str | None = None
     checkpoint_id: str | None = None
     verification_id: str | None = None
     artifact_ids: tuple[str, ...] = ()
     journal_path: str | None = None
+    journal_dir: str | None = None
     started_at: str | None = None
     finished_at: str | None = None
     message: str | None = None
@@ -436,12 +603,15 @@ class OperationRecord:
             kind=OperationKind.coerce(data.get("kind")),
             status=OperationStatus.coerce(data.get("status")),
             repository_root=_optional_string(data.get("repository_root")),
+            workspace_id=_optional_string(data.get("workspace_id")),
+            step_id=_optional_string(data.get("step_id")),
             lineage_id=_optional_string(data.get("lineage_id")),
             revision_id=_optional_string(data.get("revision_id")),
             checkpoint_id=_optional_string(data.get("checkpoint_id")),
             verification_id=_optional_string(data.get("verification_id")),
             artifact_ids=_string_tuple(data.get("artifact_ids")),
             journal_path=_optional_string(data.get("journal_path")),
+            journal_dir=_optional_string(data.get("journal_dir")),
             started_at=_optional_string(data.get("started_at")),
             finished_at=_optional_string(data.get("finished_at")),
             message=_optional_string(data.get("message")),
@@ -458,8 +628,12 @@ __all__ = [
     "OperationKind",
     "OperationRecord",
     "OperationStatus",
+    "ProvenanceInput",
     "ProvenanceRecord",
     "RevisionRecord",
+    "StepPolicyRecord",
+    "StepRecord",
     "VerificationRecord",
     "VerificationStatus",
+    "WorkspaceRecord",
 ]

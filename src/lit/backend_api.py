@@ -1,4 +1,4 @@
-"""Canonical lit v1 contracts for autonomous local workflows. Persisted revision, checkpoint, lineage, verification, artifact, and operation records serialize only through these versioned dataclasses and layout helpers; readers must tolerate legacy v0 commit JSON and absent fields. CLI, GUI, export, and future Jakal Flow adapters talk to a narrow backend API and must not hardcode .lit paths or invent metadata keys independently."""
+"""Machine-facing lit CLI and backend surfaces serialize through typed contracts here. JSON keys, exit codes, provenance input fields, workspace identity fields, step policy fields, and operation projection fields are stable automation interfaces; commands may add human rendering, but they must not invent divergent shapes or infer workspace state from filesystem layout alone."""
 
 from __future__ import annotations
 
@@ -16,7 +16,10 @@ from lit.domain import (
     OperationStatus,
     ProvenanceRecord,
     RevisionRecord,
+    StepPolicyRecord,
+    StepRecord,
     VerificationRecord,
+    WorkspaceRecord,
 )
 from lit.export_git import GitExportPlan, build_git_export_plan
 from lit.layout import LitLayout
@@ -158,6 +161,101 @@ class ArtifactHandle:
             created_at=manifest.created_at,
             pinned=manifest.pinned,
             links=tuple(ArtifactLinkHandle.from_link(link) for link in manifest.all_links),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceHandle:
+    workspace_id: str | None = None
+    lineage_id: str | None = None
+    repository_root: Path | None = None
+    workspace_root: Path | None = None
+    head_revision: str | None = None
+    materialized_revision_id: str | None = None
+    base_checkpoint_id: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+    @classmethod
+    def from_record(cls, record: WorkspaceRecord) -> "WorkspaceHandle":
+        return cls(
+            workspace_id=record.workspace_id,
+            lineage_id=record.lineage_id,
+            repository_root=None if record.repository_root is None else Path(record.repository_root),
+            workspace_root=None if record.workspace_root is None else Path(record.workspace_root),
+            head_revision=record.head_revision,
+            materialized_revision_id=record.materialized_revision_id,
+            base_checkpoint_id=record.base_checkpoint_id,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class StepHandle:
+    step_id: str | None = None
+    run_id: str | None = None
+    block_id: str | None = None
+    lineage_id: str | None = None
+    workspace_id: str | None = None
+    head_revision: str | None = None
+    checkpoint_id: str | None = None
+    operation_ids: tuple[str, ...] = ()
+    policy: StepPolicyRecord = field(default_factory=StepPolicyRecord)
+
+    @classmethod
+    def from_record(cls, record: StepRecord) -> "StepHandle":
+        return cls(
+            step_id=record.step_id,
+            run_id=record.run_id,
+            block_id=record.block_id,
+            lineage_id=record.lineage_id,
+            workspace_id=record.workspace_id,
+            head_revision=record.head_revision,
+            checkpoint_id=record.checkpoint_id,
+            operation_ids=record.operation_ids,
+            policy=record.policy,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class OperationProjection:
+    operation_id: str | None = None
+    kind: OperationKind = OperationKind.COMMIT
+    status: OperationStatus = OperationStatus.QUEUED
+    repository_root: Path | None = None
+    workspace_id: str | None = None
+    step_id: str | None = None
+    lineage_id: str | None = None
+    revision_id: str | None = None
+    checkpoint_id: str | None = None
+    verification_id: str | None = None
+    artifact_ids: tuple[str, ...] = ()
+    journal_path: Path | None = None
+    journal_dir: Path | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    message: str | None = None
+
+    @classmethod
+    def from_record(cls, record: OperationRecord) -> "OperationProjection":
+        return cls(
+            operation_id=record.operation_id,
+            kind=record.kind,
+            status=record.status,
+            repository_root=None if record.repository_root is None else Path(record.repository_root),
+            workspace_id=record.workspace_id,
+            step_id=record.step_id,
+            lineage_id=record.lineage_id,
+            revision_id=record.revision_id,
+            checkpoint_id=record.checkpoint_id,
+            verification_id=record.verification_id,
+            artifact_ids=record.artifact_ids,
+            journal_path=None if record.journal_path is None else Path(record.journal_path),
+            journal_dir=None if record.journal_dir is None else Path(record.journal_dir),
+            started_at=record.started_at,
+            finished_at=record.finished_at,
+            message=record.message,
         )
 
 
@@ -793,8 +891,9 @@ class LitBackendService(BackendService):
         message: str | None = None,
     ) -> OperationRecord:
         now = utc_now()
+        operation_id = next_identifier(kind.value)
         record = OperationRecord(
-            operation_id=next_identifier(kind.value),
+            operation_id=operation_id,
             kind=kind,
             status=OperationStatus.SUCCEEDED,
             repository_root=repo.root.as_posix(),
@@ -803,6 +902,8 @@ class LitBackendService(BackendService):
             checkpoint_id=checkpoint_id,
             verification_id=verification_id,
             artifact_ids=artifact_ids,
+            journal_path=repo.layout.journal_path(operation_id).as_posix(),
+            journal_dir=repo.layout.journal_dir(operation_id).as_posix(),
             started_at=now,
             finished_at=now,
             message=message,
@@ -825,10 +926,13 @@ __all__ = [
     "LineageHandle",
     "LitBackendService",
     "OpenRepositoryRequest",
+    "OperationProjection",
     "PreviewPromotionRequest",
     "PromoteLineageRequest",
     "RepositoryHandle",
     "RollbackRequest",
+    "StepHandle",
     "VerificationStatusRequest",
     "VerifyRevisionRequest",
+    "WorkspaceHandle",
 ]

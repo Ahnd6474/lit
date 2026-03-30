@@ -1,4 +1,4 @@
-"""Canonical lit v1 contracts for autonomous local workflows. Persisted revision, checkpoint, lineage, verification, artifact, and operation records serialize only through these versioned dataclasses and layout helpers; readers must tolerate legacy v0 commit JSON and absent fields. CLI, GUI, export, and future Jakal Flow adapters talk to a narrow backend API and must not hardcode .lit paths or invent metadata keys independently."""
+"""Machine-facing lit CLI and backend surfaces serialize through typed contracts here. JSON keys, exit codes, provenance input fields, workspace identity fields, step policy fields, and operation projection fields are stable automation interfaces; commands may add human rendering, but they must not invent divergent shapes or infer workspace state from filesystem layout alone."""
 
 from __future__ import annotations
 
@@ -103,6 +103,10 @@ class LitLayout:
         return self.v1 / "artifacts"
 
     @property
+    def workspaces(self) -> Path:
+        return self.v1 / "workspaces"
+
+    @property
     def operations(self) -> Path:
         return self.v1 / "operations"
 
@@ -141,6 +145,9 @@ class LitLayout:
     def artifact_payload_path(self, artifact_id: str, filename: str = "payload") -> Path:
         return self.artifact_dir(artifact_id) / filename
 
+    def workspace_path(self, workspace_id: str) -> Path:
+        return self.workspaces / f"{workspace_id}.json"
+
     def operation_path(self, operation_id: str) -> Path:
         return self.operations / f"{operation_id}.json"
 
@@ -152,6 +159,9 @@ class LitLayout:
 
     def lock_path(self, name: str = "repository") -> Path:
         return self.locks / f"{name}.lock"
+
+    def workspace_lock_path(self, workspace_id: str) -> Path:
+        return self.lock_path(f"workspace-{workspace_id}")
 
     def managed_directories(self) -> tuple[Path, ...]:
         return (
@@ -170,6 +180,7 @@ class LitLayout:
             self.lineages,
             self.verifications,
             self.artifacts,
+            self.workspaces,
             self.operations,
             self.journals,
             self.locks,

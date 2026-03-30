@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import os
 import subprocess
 import sys
@@ -16,11 +17,38 @@ from lit.backend_api import (
     BackendService,
     CreateCheckpointRequest,
     CreateRevisionRequest,
+    OperationProjection,
     OpenRepositoryRequest,
     RepositoryHandle,
+    StepHandle,
+    WorkspaceHandle,
+)
+from lit.commands.common import (
+    AutomationError,
+    AutomationErrorEnvelope,
+    AutomationResultEnvelope,
+    CLI_EXIT_CODE_MAP,
+    CliExitCode,
+    add_provenance_arguments,
+    exit_code_for_exception,
+    exit_code_for_verification_status,
+    provenance_input_from_args,
+    provenance_record_from_args,
 )
 from lit.commits import CommitMetadata, CommitRecord, commit_id, deserialize_commit, serialize_commit
-from lit.domain import ApprovalState, ProvenanceRecord, RevisionRecord, VerificationStatus
+from lit.domain import (
+    ApprovalState,
+    OperationKind,
+    OperationRecord,
+    OperationStatus,
+    ProvenanceInput,
+    ProvenanceRecord,
+    RevisionRecord,
+    StepPolicyRecord,
+    StepRecord,
+    VerificationStatus,
+    WorkspaceRecord,
+)
 from lit.layout import LitLayout
 from lit.merge_ops import merge_revision
 from lit.refs import branch_ref
@@ -117,7 +145,12 @@ def test_v1_contract_modules_freeze_layout_and_backend_surface(tmp_path: Path) -
     assert layout.artifact_record_path("art-1") == (
         tmp_path / ".lit" / "v1" / "artifacts" / "art-1" / "artifact.json"
     )
+    assert layout.workspaces == tmp_path / ".lit" / "v1" / "workspaces"
+    assert layout.workspace_path("ws-1") == tmp_path / ".lit" / "v1" / "workspaces" / "ws-1.json"
     assert layout.lock_path() == tmp_path / ".lit" / "v1" / "locks" / "repository.lock"
+    assert layout.workspace_lock_path("ws-1") == (
+        tmp_path / ".lit" / "v1" / "locks" / "workspace-ws-1.lock"
+    )
 
     handle = RepositoryHandle.for_root(tmp_path, current_branch="main", is_initialized=True)
     assert handle.layout.revisions == layout.revisions
@@ -161,6 +194,230 @@ def test_v1_contract_modules_freeze_layout_and_backend_surface(tmp_path: Path) -
         "list_artifacts",
         "get_artifact",
     } <= BackendService.__abstractmethods__
+
+
+def test_automation_contract_primitives_pin_exit_codes_envelopes_and_provenance_fields() -> None:
+    parser = argparse.ArgumentParser(add_help=False)
+    add_provenance_arguments(parser)
+    args = parser.parse_args(
+        [
+            "--provenance-actor-role",
+            "executor",
+            "--provenance-actor-id",
+            "agent-main",
+            "--provenance-step-id",
+            "step-7",
+            "--provenance-lineage-id",
+            "main",
+            "--provenance-origin-commit",
+            "abc123",
+            "--provenance-committed-at",
+            "2026-03-30T00:00:00Z",
+        ]
+    )
+    env = {
+        "LIT_PROVENANCE_AGENT_FAMILY": "gpt-5.4",
+        "LIT_PROVENANCE_RUN_ID": "run-42",
+        "LIT_PROVENANCE_BLOCK_ID": "block-9",
+    }
+
+    provenance_input = provenance_input_from_args(args, env=env)
+    assert provenance_input == ProvenanceInput(
+        actor_role="executor",
+        actor_id="agent-main",
+        agent_family="gpt-5.4",
+        run_id="run-42",
+        block_id="block-9",
+        step_id="step-7",
+        lineage_id="main",
+        committed_at="2026-03-30T00:00:00Z",
+        origin_commit="abc123",
+    )
+    assert provenance_input.to_dict() == {
+        "actor_id": "agent-main",
+        "actor_role": "executor",
+        "agent_family": "gpt-5.4",
+        "block_id": "block-9",
+        "committed_at": "2026-03-30T00:00:00Z",
+        "lineage_id": "main",
+        "origin_commit": "abc123",
+        "run_id": "run-42",
+        "step_id": "step-7",
+    }
+
+    provenance_record = provenance_record_from_args(args, env=env)
+    assert provenance_record.to_dict() == {
+        "actor_id": "agent-main",
+        "actor_role": "executor",
+        "agent_family": "gpt-5.4",
+        "block_id": "block-9",
+        "committed_at": "2026-03-30T00:00:00Z",
+        "lineage_id": "main",
+        "origin_commit": "abc123",
+        "prompt_template": None,
+        "promoted_from": None,
+        "rewritten_from": None,
+        "run_id": "run-42",
+        "step_id": "step-7",
+        "verification_status": "never_verified",
+        "verification_summary": None,
+    }
+
+    assert {name: int(code) for name, code in CLI_EXIT_CODE_MAP.items()} == {
+        "success": 0,
+        "error": 1,
+        "usage_error": 2,
+        "not_found": 3,
+        "verification_failed": 4,
+        "conflict": 5,
+    }
+    assert exit_code_for_exception(FileNotFoundError("missing")) is CliExitCode.NOT_FOUND
+    assert exit_code_for_exception(ValueError("bad input")) is CliExitCode.USAGE_ERROR
+    assert exit_code_for_exception(RuntimeError("boom")) is CliExitCode.ERROR
+    assert exit_code_for_verification_status(VerificationStatus.PASSED) is CliExitCode.SUCCESS
+    assert (
+        exit_code_for_verification_status(VerificationStatus.CACHED_PASS)
+        is CliExitCode.SUCCESS
+    )
+    assert (
+        exit_code_for_verification_status(VerificationStatus.FAILED)
+        is CliExitCode.VERIFICATION_FAILED
+    )
+
+    assert AutomationResultEnvelope(
+        command="commit",
+        result={"revision_id": "rev-1"},
+    ).to_dict() == {
+        "command": "commit",
+        "exit_code": 0,
+        "ok": True,
+        "result": {"revision_id": "rev-1"},
+    }
+    assert AutomationErrorEnvelope(
+        command="checkpoint",
+        exit_code=CliExitCode.NOT_FOUND,
+        error=AutomationError(code="not_found", message="checkpoint missing"),
+    ).to_dict() == {
+        "command": "checkpoint",
+        "error": {"code": "not_found", "message": "checkpoint missing"},
+        "exit_code": 3,
+        "ok": False,
+    }
+
+
+def test_contract_records_pin_workspace_step_and_operation_fields(tmp_path: Path) -> None:
+    workspace_record = WorkspaceRecord(
+        workspace_id="ws-1",
+        lineage_id="main",
+        repository_root=tmp_path.as_posix(),
+        workspace_root=(tmp_path / "workspaces" / "ws-1").as_posix(),
+        head_revision="rev-1",
+        materialized_revision_id="rev-1",
+        base_checkpoint_id="cp-1",
+        created_at="2026-03-30T00:00:00Z",
+        updated_at="2026-03-30T01:00:00Z",
+    )
+    assert workspace_record.to_dict() == {
+        "base_checkpoint_id": "cp-1",
+        "created_at": "2026-03-30T00:00:00Z",
+        "head_revision": "rev-1",
+        "lineage_id": "main",
+        "materialized_revision_id": "rev-1",
+        "repository_root": tmp_path.as_posix(),
+        "schema_version": 1,
+        "updated_at": "2026-03-30T01:00:00Z",
+        "workspace_id": "ws-1",
+        "workspace_root": (tmp_path / "workspaces" / "ws-1").as_posix(),
+    }
+    workspace_handle = WorkspaceHandle.from_record(workspace_record)
+    assert workspace_handle.repository_root == tmp_path
+    assert workspace_handle.workspace_root == tmp_path / "workspaces" / "ws-1"
+
+    step_policy = StepPolicyRecord(
+        step_id="step-7",
+        owned_paths=("src/lit", "tests"),
+        allow_owned_path_overlap_with=("main",),
+        require_checkpoint=True,
+        require_verification=True,
+    )
+    step_record = StepRecord(
+        step_id="step-7",
+        run_id="run-42",
+        block_id="block-9",
+        lineage_id="main",
+        workspace_id="ws-1",
+        head_revision="rev-1",
+        checkpoint_id="cp-1",
+        operation_ids=("commit-1",),
+        policy=step_policy,
+    )
+    assert step_record.to_dict() == {
+        "block_id": "block-9",
+        "checkpoint_id": "cp-1",
+        "head_revision": "rev-1",
+        "lineage_id": "main",
+        "operation_ids": ["commit-1"],
+        "policy": {
+            "allow_empty_commit": False,
+            "allow_owned_path_overlap_with": ["main"],
+            "owned_paths": ["src/lit", "tests"],
+            "require_checkpoint": True,
+            "require_verification": True,
+            "schema_version": 1,
+            "step_id": "step-7",
+        },
+        "run_id": "run-42",
+        "schema_version": 1,
+        "step_id": "step-7",
+        "workspace_id": "ws-1",
+    }
+    step_handle = StepHandle.from_record(step_record)
+    assert step_handle.policy.require_checkpoint is True
+    assert step_handle.operation_ids == ("commit-1",)
+
+    layout = LitLayout(tmp_path)
+    operation = OperationRecord(
+        operation_id="commit-1",
+        kind=OperationKind.COMMIT,
+        status=OperationStatus.SUCCEEDED,
+        repository_root=tmp_path.as_posix(),
+        workspace_id="ws-1",
+        step_id="step-7",
+        lineage_id="main",
+        revision_id="rev-1",
+        checkpoint_id="cp-1",
+        artifact_ids=("art-1",),
+        journal_path=layout.journal_path("commit-1").as_posix(),
+        journal_dir=layout.journal_dir("commit-1").as_posix(),
+        started_at="2026-03-30T00:00:00Z",
+        finished_at="2026-03-30T00:01:00Z",
+        message="created revision",
+    )
+    assert operation.to_dict() == {
+        "artifact_ids": ["art-1"],
+        "checkpoint_id": "cp-1",
+        "finished_at": "2026-03-30T00:01:00Z",
+        "journal_dir": layout.journal_dir("commit-1").as_posix(),
+        "journal_path": layout.journal_path("commit-1").as_posix(),
+        "kind": "commit",
+        "lineage_id": "main",
+        "message": "created revision",
+        "operation_id": "commit-1",
+        "repository_root": tmp_path.as_posix(),
+        "revision_id": "rev-1",
+        "schema_version": 1,
+        "started_at": "2026-03-30T00:00:00Z",
+        "status": "succeeded",
+        "step_id": "step-7",
+        "verification_id": None,
+        "workspace_id": "ws-1",
+    }
+    projection = OperationProjection.from_record(operation)
+    assert projection.repository_root == tmp_path
+    assert projection.journal_path == layout.journal_path("commit-1")
+    assert projection.journal_dir == layout.journal_dir("commit-1")
+    assert projection.workspace_id == "ws-1"
+    assert projection.step_id == "step-7"
 
 
 def test_release_version_strings_match_pyproject() -> None:

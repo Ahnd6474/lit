@@ -14,6 +14,15 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 
 def run(args: argparse.Namespace) -> int:
     repository = Repository.discover(Path.cwd())
+
+    index = repository.read_index()
+    paths = [entry.path for entry in index.entries]
+    try:
+        repository.validate_ownership(paths)
+    except ValueError as error:
+        print(f"error: {error}")
+        return 1
+
     commit_id = repository.commit(args.message)
     print(f"[{repository.current_branch_name()} {commit_id[:12]}] {args.message}")
     return 0

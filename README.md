@@ -42,7 +42,7 @@ The docs below keep the planned workflow visible because those command names are
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .
+python -m pip install -e .
 python -m lit init my-project
 ```
 
@@ -51,7 +51,7 @@ On Windows PowerShell:
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install -e .
+python -m pip install -e .
 python -m lit init my-project
 ```
 

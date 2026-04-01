@@ -1594,7 +1594,7 @@ class Repository:
         approval_note: str | None = None,
         provenance: ProvenanceRecord | None = None,
         artifact_ids: tuple[str, ...] = (),
-    ) -> OperationRecord:
+    ) -> CheckpointRecord:
         resolved_revision = self.resolve_revision(revision_id)
         if resolved_revision is None:
             raise ValueError(f"unknown revision: {revision_id}")
@@ -1629,7 +1629,15 @@ class Repository:
             except Exception as error:
                 self._finish_operation(operation, status=OperationStatus.FAILED, checkpoint_id=checkpoint_id, lineage_id=normalized.lineage_id, message=str(error))
                 raise
-            return self._finish_operation(operation, status=OperationStatus.SUCCEEDED, revision_id=resolved_revision, checkpoint_id=checkpoint_id, artifact_ids=artifact_ids, lineage_id=normalized.lineage_id)
+            self._finish_operation(
+                operation,
+                status=OperationStatus.SUCCEEDED,
+                revision_id=resolved_revision,
+                checkpoint_id=checkpoint_id,
+                artifact_ids=artifact_ids,
+                lineage_id=normalized.lineage_id,
+            )
+            return record
 
     def update_checkpoint(
         self,
@@ -1670,11 +1678,27 @@ class Repository:
     def set_checkpoint_approval(self, checkpoint_id: str, *, state: ApprovalState, note: str | None = None) -> CheckpointRecord:
         return self.update_checkpoint(checkpoint_id, approval_state=state, approval_note=note)
 
-    def rollback_to_checkpoint(self, checkpoint_id: str | None = None, *, use_latest_safe: bool = True) -> OperationRecord:
+    def rollback_to_checkpoint(
+        self,
+        checkpoint_id: str | None = None,
+        *,
+        use_latest_safe: bool = True,
+        lineage_id: str | None = None,
+    ) -> CheckpointRecord:
+        scoped_lineage = lineage_id or self.current_branch_name()
         target = self.get_checkpoint(checkpoint_id) if checkpoint_id is not None else None
         if target is None and use_latest_safe:
-            target = self.latest_safe_checkpoint(lineage_id=self.current_branch_name() or self.config.default_branch) or self.latest_safe_checkpoint()
-        if target is None or target.revision_id is None:
+            target = self.latest_safe_checkpoint(lineage_id=scoped_lineage)
+            if target is None and scoped_lineage is not None:
+                target = self.latest_safe_checkpoint()
+        if target is None:
+            candidates = self.list_checkpoints(lineage_id=scoped_lineage)
+            if not candidates and scoped_lineage is not None:
+                candidates = self.list_checkpoints()
+            if not candidates:
+                raise FileNotFoundError("no checkpoints available for rollback")
+            target = candidates[-1]
+        if target.revision_id is None:
             raise ValueError("no checkpoint available for rollback")
         with self._mutation(OperationKind.ROLLBACK.value, message=f"rollback to {target.checkpoint_id}"):
             operation = self._begin_operation(OperationKind.ROLLBACK, message=f"rollback to {target.checkpoint_id}", lineage_id=target.provenance.lineage_id)
@@ -1692,7 +1716,14 @@ class Repository:
             except Exception as error:
                 self._finish_operation(operation, status=OperationStatus.FAILED, checkpoint_id=target.checkpoint_id, lineage_id=target.provenance.lineage_id, message=str(error))
                 raise
-            return self._finish_operation(operation, status=OperationStatus.SUCCEEDED, revision_id=target.revision_id, checkpoint_id=target.checkpoint_id, lineage_id=target.provenance.lineage_id)
+            self._finish_operation(
+                operation,
+                status=OperationStatus.SUCCEEDED,
+                revision_id=target.revision_id,
+                checkpoint_id=target.checkpoint_id,
+                lineage_id=target.provenance.lineage_id,
+            )
+            return target
 
     def list_lineages(self) -> tuple[LineageRecord, ...]:
         return tuple(

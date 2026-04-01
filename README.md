@@ -23,47 +23,61 @@ It is local-only, offline-first, and intentionally narrower than Git. Repository
 
 `lit` requires Python `3.12+`.
 
-This repository uses a `src/` layout. The examples below assume you either install the package in editable mode or run commands from an environment where `src/` is on `PYTHONPATH`.
+The recommended workflow is an editable install into a virtual environment. This installs the `lit` command (a console script) into that environment, so you can run `lit ...` once the environment is active.
 
-### CLI only
+### 1) Create and activate a virtual environment
+
+macOS/Linux:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e .
-lit init my-project
 ```
 
-On Windows PowerShell:
+Windows PowerShell:
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
+```
+
+If activation is blocked by your PowerShell execution policy, run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+### 2) Install (CLI-only)
+
+```bash
 python -m pip install -e .
-lit init my-project
 ```
 
-If you prefer the installed command:
+You can now run either:
 
 ```bash
-pip install -e .
-lit init my-project
+lit --help
+python -m lit --help
 ```
 
-If you are developing directly from a checkout without installing, use:
+`python -m lit` is the no-PATH fallback and always runs `lit` using the current Python interpreter.
 
-```bash
-PYTHONPATH=src python -m lit --help
-```
-
-### With the desktop GUI
+### 3) Optional: install the desktop GUI
 
 ```bash
 python -m pip install -e ".[gui]"
 lit-gui
 ```
 
-`lit-gui` depends on the optional `PySide6` extra. The base install is CLI-only.
+If `lit-gui` is not on your PATH, you can launch the same app with:
+
+```bash
+python -m lit_gui.app
+```
+
+### PATH notes (especially on Windows)
+
+If `lit` is not found after installing, it usually means you are running a different Python environment than the one you installed into (for example: a different venv, or no venv). Use `python -m lit ...` to avoid PATH issues, and prefer `python -m pip ...` so you install into the same interpreter you are running.
 
 ## Quick start
 

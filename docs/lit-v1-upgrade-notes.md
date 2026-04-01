@@ -14,17 +14,25 @@ V1 replaces that framing with:
 
 ## Packaging change
 
-The base install is now CLI-only:
+The base install is now CLI-only (installs the `lit` console script into the active Python environment):
 
 ```bash
 python -m pip install -e .
 ```
 
+If the `lit` command is not available on your PATH, the no-PATH fallback is:
+
+```bash
+python -m lit --help
+```
+
 Install the desktop dependency explicitly when needed:
 
 ```bash
-python -m pip install -e .[gui]
+python -m pip install -e ".[gui]"
 ```
+
+This also installs `lit-gui` (with `python -m lit_gui.app` as the no-PATH fallback).
 
 ## New public CLI surfaces
 

@@ -7,7 +7,7 @@
 From the repository root:
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[gui]"
 lit-gui
 ```
 

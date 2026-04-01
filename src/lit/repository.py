@@ -1897,77 +1897,10 @@ class Repository:
                 return
             current = current.parent
 
-
-try:
-    from lit.backend_api import BackendService
-except ImportError:  # pragma: no cover - legacy backend shim during circular imports
-    class BackendService:  # type: ignore[no-redef]
-        pass
-
-
-class RepositoryBackend(BackendService):
-    def open_repository(self, request: OpenRepositoryRequest) -> RepositoryHandle:
-        if request.create_if_missing and not (request.root / ".lit").is_dir():
-            return Repository.create(request.root, default_branch=request.default_branch).repository_handle()
-        return Repository.open(request.root).repository_handle()
-
-    def initialize_repository(self, request: OpenRepositoryRequest) -> RepositoryHandle:
-        return Repository.create(request.root, default_branch=request.default_branch).repository_handle()
-
-    def get_repository_state(self, root: Path) -> RepositoryHandle:
-        return Repository.open(root).repository_handle()
-
-    def list_revisions(self, root: Path, *, start_revision: str | None = None, lineage_id: str | None = None) -> tuple[RevisionRecord, ...]:
-        return Repository.open(root).list_revisions(start_revision=start_revision, lineage_id=lineage_id)
-
-    def get_revision(self, root: Path, revision_id: str) -> RevisionRecord:
-        return Repository.open(root).get_revision(revision_id)
-
-    def create_revision(self, request: CreateRevisionRequest) -> OperationRecord:
-        return Repository.open(request.root).create_revision(message=request.message, tree=request.tree, parents=request.parents, provenance=request.provenance, artifact_ids=request.artifact_ids)
-
-    def list_checkpoints(self, root: Path, *, lineage_id: str | None = None, only_safe: bool = False) -> tuple[CheckpointRecord, ...]:
-        return Repository.open(root).list_checkpoints(lineage_id=lineage_id, only_safe=only_safe)
-
-    def get_checkpoint(self, root: Path, checkpoint_id: str) -> CheckpointRecord:
-        return Repository.open(root).get_checkpoint(checkpoint_id)
-
-    def create_checkpoint(self, request: CreateCheckpointRequest) -> OperationRecord:
-        return Repository.open(request.root).create_checkpoint(revision_id=request.revision_id, name=request.name, note=request.note, safe=request.safe, pinned=request.pinned, approval_state=request.approval_state, provenance=request.provenance, artifact_ids=request.artifact_ids)
-
-    def rollback_to_checkpoint(self, request: RollbackRequest) -> OperationRecord:
-        return Repository.open(request.root).rollback_to_checkpoint(checkpoint_id=request.checkpoint_id, use_latest_safe=request.use_latest_safe)
-
-    def list_lineages(self, root: Path) -> tuple[LineageRecord, ...]:
-        return Repository.open(root).list_lineages()
-
-    def get_lineage(self, root: Path, lineage_id: str) -> LineageRecord:
-        return Repository.open(root).get_lineage(lineage_id)
-
-    def create_lineage(self, request: CreateLineageRequest) -> OperationRecord:
-        return Repository.open(request.root).create_lineage(lineage_id=request.lineage_id, forked_from=request.forked_from, title=request.title, description=request.description)
-
-    def promote_lineage(self, request: PromoteLineageRequest) -> OperationRecord:
-        return Repository.open(request.root).promote_lineage(lineage_id=request.lineage_id, destination_lineage_id=request.destination_lineage_id, expected_head_revision=request.expected_head_revision)
-
-    def record_verification(self, request: VerifyRevisionRequest) -> VerificationRecord:
-        return Repository.open(request.root).record_verification(revision_id=request.revision_id, command=request.command, allow_cache=request.allow_cache, state_fingerprint=request.state_fingerprint, environment_fingerprint=request.environment_fingerprint, command_identity=request.command_identity)
-
-    def get_verification(self, root: Path, verification_id: str) -> VerificationRecord:
-        return Repository.open(root).get_verification(verification_id)
-
-    def list_artifacts(self, root: Path, *, owner_id: str | None = None) -> tuple[ArtifactRecord, ...]:
-        return Repository.open(root).list_artifacts(owner_id=owner_id)
-
-    def get_artifact(self, root: Path, artifact_id: str) -> ArtifactRecord:
-        return Repository.open(root).get_artifact(artifact_id)
-
-
 __all__ = [
     "BranchRecord",
     "CheckoutRecord",
     "Repository",
-    "RepositoryBackend",
     "RepositoryConfig",
     "RepositoryLayout",
     "StatusReport",

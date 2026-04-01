@@ -23,13 +23,15 @@ It is local-only, offline-first, and intentionally narrower than Git. Repository
 
 `lit` requires Python `3.12+`.
 
+This repository uses a `src/` layout. The examples below assume you either install the package in editable mode or run commands from an environment where `src/` is on `PYTHONPATH`.
+
 ### CLI only
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
-python -m lit init my-project
+lit init my-project
 ```
 
 On Windows PowerShell:
@@ -38,7 +40,7 @@ On Windows PowerShell:
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -e .
-python -m lit init my-project
+lit init my-project
 ```
 
 If you prefer the installed command:
@@ -48,12 +50,20 @@ pip install -e .
 lit init my-project
 ```
 
+If you are developing directly from a checkout without installing, use:
+
+```bash
+PYTHONPATH=src python -m lit --help
+```
+
 ### With the desktop GUI
 
 ```bash
 python -m pip install -e ".[gui]"
 lit-gui
 ```
+
+`lit-gui` depends on the optional `PySide6` extra. The base install is CLI-only.
 
 ## Quick start
 
@@ -105,6 +115,8 @@ Re-running `lit init` in the same folder keeps the repository and prints a reini
 - `lit doctor` inspects repository health, locks, and unfinished transactions.
 - `lit export` builds a Git-facing export plan for compatibility workflows.
 
+Many of these commands also support `--json` and are intended to expose the same canonical repository snapshot and blockage diagnostics that the GUI uses.
+
 ## Beginner workflow
 
 This is the everyday local flow the tool is built around:
@@ -153,9 +165,41 @@ After `lit init`, the repository contains:
 Notable details:
 
 - `config.json` stores `default_branch` and `schema_version`.
+- `.lit/config.json` is also the explicit policy surface for verification, checkpoint, artifact, lineage, and resumable operation defaults.
 - `HEAD` points to `refs/heads/<branch>` until you detach it to a revision.
 - Object identifiers are SHA-256 hashes of raw bytes.
 - The richer `v1/` records cover revisions, checkpoints, lineages, verifications, artifacts, workspaces, operations, journals, and locks.
+
+## Policy config
+
+`lit` loads machine-facing policy from `.lit/config.json`. The current policy groups are:
+
+- `verification`: default definition name and command, cache behavior, and whether verification is required before commit.
+- `checkpoints`: safe-by-default behavior, approval requirements, and auto-pinning for safe checkpoints.
+- `artifacts`: artifact storage location and rollback preservation behavior.
+- `lineage`: default base checkpoint strategy, owned-path enforcement, overlap allowlists, and affected-lineage scope defaults.
+- `operations`: whether merge/rebase resume is allowed, how safe rollback targets are chosen, and whether blockage reasons are exposed.
+
+These settings are consumed through `src/lit/config.py` and surfaced through the shared backend service instead of being inferred separately by CLI and GUI callers.
+
+## Architecture notes
+
+The current v1 structure is intentionally split across a few boundaries:
+
+- `src/lit/domain.py` defines the canonical records for revisions, checkpoints, lineages, verifications, resumable operations, and repository snapshots.
+- `src/lit/backend_api.py` is the shared service boundary for CLI, GUI, and automation-oriented JSON surfaces.
+- `src/lit/workflows.py` owns merge, rebase, checkpoint, rollback, verification, and resume/abort orchestration.
+- `src/lit/repository.py` remains the storage and mutation engine under that service layer.
+- `src/lit_gui/session.py` wraps the same backend service rather than shaping repository state independently.
+
+If you are adding features, prefer extending these shared contracts and service paths instead of inventing CLI-only or GUI-only state models.
+
+## Recovery and operator guidance
+
+- Run `lit doctor --json` when automation needs a machine-readable reason for why work is blocked.
+- Active merge and rebase state include resumable operation metadata, conflict paths, and the current safe rollback target.
+- `lit rollback` uses the configured safe checkpoint preference, so the default recovery target can be lineage-scoped or repository-wide by policy.
+- Use `lit checkpoint create --json` before high-risk changes when you want an explicit rollback boundary that external orchestration can record.
 
 ## Local docs site
 
@@ -172,6 +216,7 @@ Current limits:
 - `lit` is still a local-first tool, not a hosted collaboration platform.
 - There is no remote repository workflow.
 - Some compatibility surfaces, like `export`, are bridges rather than full Git parity.
+- GUI support is optional and requires the `gui` extra.
 
 Non-goals:
 
@@ -186,4 +231,3 @@ Run the test suite with:
 ```bash
 python -m pytest
 ```
-

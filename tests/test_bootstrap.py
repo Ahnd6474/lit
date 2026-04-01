@@ -35,15 +35,21 @@ from lit.commands.common import (
     provenance_input_from_args,
     provenance_record_from_args,
 )
+from lit.config import LitConfig, SafeRollbackPreference, read_lit_config
 from lit.commits import CommitMetadata, CommitRecord, commit_id, deserialize_commit, serialize_commit
 from lit.domain import (
     ApprovalState,
+    LineageScopeRecord,
+    LineageScopeKind,
     OperationKind,
     OperationRecord,
     OperationStatus,
     ProvenanceInput,
     ProvenanceRecord,
+    RepositoryBlockageReason,
+    RepositorySnapshotRecord,
     RevisionRecord,
+    ResumeOperationRecord,
     StepPolicyRecord,
     StepRecord,
     VerificationStatus,
@@ -138,6 +144,9 @@ def test_v1_contract_modules_freeze_layout_and_backend_surface(tmp_path: Path) -
 
     layout = LitLayout(tmp_path)
     assert layout.branch_path("feature/demo") == tmp_path / ".lit" / "refs" / "heads" / "feature" / "demo"
+    assert layout.policy_config == tmp_path / ".lit" / "config.json"
+    assert layout.resume_state_path("merge") == tmp_path / ".lit" / "state" / "merge.json"
+    assert layout.resume_state_path("rebase") == tmp_path / ".lit" / "state" / "rebase.json"
     assert layout.revision_path("rev-1") == tmp_path / ".lit" / "v1" / "revisions" / "rev-1.json"
     assert layout.checkpoint_path("cp-1") == tmp_path / ".lit" / "v1" / "checkpoints" / "cp-1.json"
     assert layout.lineage_path("main") == tmp_path / ".lit" / "v1" / "lineages" / "main.json"
@@ -156,6 +165,10 @@ def test_v1_contract_modules_freeze_layout_and_backend_surface(tmp_path: Path) -
     assert handle.layout.revisions == layout.revisions
     assert handle.current_branch == "main"
     assert handle.is_initialized is True
+    assert handle.snapshot is not None
+    assert handle.snapshot.current_branch == "main"
+    assert handle.snapshot.default_branch == "main"
+    assert handle.policy.default_branch == "main"
 
     open_request = OpenRepositoryRequest(root=tmp_path, create_if_missing=True)
     revision_request = CreateRevisionRequest(
@@ -177,6 +190,9 @@ def test_v1_contract_modules_freeze_layout_and_backend_surface(tmp_path: Path) -
         "open_repository",
         "initialize_repository",
         "get_repository_state",
+        "get_repository_snapshot",
+        "get_resume_state",
+        "get_repository_policy",
         "list_revisions",
         "get_revision",
         "create_revision",
@@ -188,11 +204,17 @@ def test_v1_contract_modules_freeze_layout_and_backend_surface(tmp_path: Path) -
         "get_lineage",
         "create_lineage",
         "switch_lineage",
+        "preview_lineage_promotion",
         "promote_lineage",
+        "discard_lineage",
         "record_verification",
         "get_verification",
+        "get_verification_status",
         "list_artifacts",
         "get_artifact",
+        "link_artifact",
+        "doctor",
+        "export_git",
     } <= BackendService.__abstractmethods__
 
 
@@ -418,6 +440,106 @@ def test_contract_records_pin_workspace_step_and_operation_fields(tmp_path: Path
     assert projection.journal_dir == layout.journal_dir("commit-1")
     assert projection.workspace_id == "ws-1"
     assert projection.step_id == "step-7"
+
+
+def test_contract_records_pin_snapshot_resume_and_policy_fields(tmp_path: Path) -> None:
+    layout = LitLayout(tmp_path)
+    repo = Repository.create(tmp_path)
+
+    config = read_lit_config(layout)
+    assert config == LitConfig()
+    assert config.checkpoints.safe_by_default is True
+    assert (
+        config.operations.safe_rollback_preference
+        is SafeRollbackPreference.LINEAGE_THEN_REPOSITORY
+    )
+    assert config.lineage.default_affected_scope is LineageScopeKind.CURRENT
+
+    resume = ResumeOperationRecord(
+        kind=OperationKind.MERGE,
+        state_path=layout.resume_state_path("merge").as_posix(),
+        head_ref="refs/heads/main",
+        current_revision_id="rev-main",
+        base_revision_id="rev-base",
+        target_revision_id="rev-feature",
+        target_ref="refs/heads/feature",
+        pending_revision_ids=("rev-feature",),
+        conflict_paths=("story.txt",),
+        blockage_reason=RepositoryBlockageReason.MERGE_CONFLICTS,
+        blockage_detail="merge blocked by conflicts: story.txt",
+        safe_rollback_checkpoint_id="cp-safe",
+        affected_lineage_scope=LineageScopeRecord(
+            scope_kind=LineageScopeKind.EXPLICIT,
+            primary_lineage_id="main",
+            lineage_ids=("main", "feature"),
+        ),
+    )
+    round_tripped_resume = ResumeOperationRecord.from_dict(resume.to_dict())
+    assert round_tripped_resume.blockage_reason is RepositoryBlockageReason.MERGE_CONFLICTS
+    assert round_tripped_resume.safe_rollback_checkpoint_id == "cp-safe"
+    assert round_tripped_resume.affected_lineage_scope.lineage_ids == ("main", "feature")
+
+    snapshot = RepositorySnapshotRecord(
+        repository_root=tmp_path.as_posix(),
+        dot_lit_dir=repo.layout.dot_lit.as_posix(),
+        is_initialized=True,
+        default_branch="main",
+        current_branch="main",
+        current_lineage_id="main",
+        head_ref="refs/heads/main",
+        head_revision="rev-main",
+        latest_safe_checkpoint_id="cp-safe",
+        safe_rollback_checkpoint_id="cp-safe",
+        blockage_reason=RepositoryBlockageReason.MERGE_CONFLICTS,
+        blockage_detail="merge blocked by conflicts: story.txt",
+        affected_lineage_scope=round_tripped_resume.affected_lineage_scope,
+        resume_operation=round_tripped_resume,
+    )
+    assert snapshot.to_dict() == {
+        "affected_lineage_scope": {
+            "lineage_ids": ["main", "feature"],
+            "primary_lineage_id": "main",
+            "schema_version": 1,
+            "scope_kind": "explicit",
+        },
+        "blockage_detail": "merge blocked by conflicts: story.txt",
+        "blockage_reason": "merge_conflicts",
+        "current_branch": "main",
+        "current_lineage_id": "main",
+        "default_branch": "main",
+        "dot_lit_dir": repo.layout.dot_lit.as_posix(),
+        "head_ref": "refs/heads/main",
+        "head_revision": "rev-main",
+        "is_initialized": True,
+        "latest_safe_checkpoint_id": "cp-safe",
+        "repository_root": tmp_path.as_posix(),
+        "resume_operation": {
+            "affected_lineage_scope": {
+                "lineage_ids": ["main", "feature"],
+                "primary_lineage_id": "main",
+                "schema_version": 1,
+                "scope_kind": "explicit",
+            },
+            "applied_revision_ids": [],
+            "base_revision_id": "rev-base",
+            "blockage_detail": "merge blocked by conflicts: story.txt",
+            "blockage_reason": "merge_conflicts",
+            "conflict_paths": ["story.txt"],
+            "current_revision_id": "rev-main",
+            "head_ref": "refs/heads/main",
+            "kind": "merge",
+            "onto_revision_id": None,
+            "original_head_revision_id": None,
+            "pending_revision_ids": ["rev-feature"],
+            "safe_rollback_checkpoint_id": "cp-safe",
+            "schema_version": 1,
+            "state_path": layout.resume_state_path("merge").as_posix(),
+            "target_ref": "refs/heads/feature",
+            "target_revision_id": "rev-feature",
+        },
+        "safe_rollback_checkpoint_id": "cp-safe",
+        "schema_version": 1,
+    }
 
 
 def test_release_version_strings_match_pyproject() -> None:

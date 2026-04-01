@@ -22,7 +22,16 @@ from lit.backend_api import (
     VerificationStatusRequest,
     VerifyRevisionRequest,
 )
-from lit.domain import ApprovalState, ProvenanceRecord, VerificationStatus
+from lit.config import SafeRollbackPreference
+from lit.domain import (
+    ApprovalState,
+    LineageScopeKind,
+    OperationKind,
+    ProvenanceRecord,
+    RepositoryBlockageReason,
+    VerificationStatus,
+)
+from lit.merge_ops import merge_revision
 from lit.repository import Repository
 
 
@@ -278,3 +287,90 @@ def test_backend_service_exposes_lineage_preview_doctor_and_git_export_plan(
     )
     assert ("Lit-Actor-Id", "agent-feature") in feature_export.trailers
     assert ("Lit-Lineage-Id", "feature") in feature_export.trailers
+
+
+def test_backend_service_exposes_canonical_snapshot_resume_and_policy_contracts(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "repo"
+    service = LitBackendService()
+
+    unopened = service.open_repository(OpenRepositoryRequest(root=root))
+    assert unopened.is_initialized is False
+    assert unopened.snapshot is not None
+    assert unopened.snapshot.blockage_reason is RepositoryBlockageReason.REPOSITORY_UNINITIALIZED
+
+    service.initialize_repository(OpenRepositoryRequest(root=root))
+    story = root / "story.txt"
+    story.write_text("base\n", encoding="utf-8")
+    repo = Repository.open(root)
+    repo.stage(["story.txt"])
+    base_operation = service.create_revision(
+        CreateRevisionRequest(
+            root=root,
+            message="base",
+            provenance=ProvenanceRecord(
+                actor_role="executor",
+                actor_id="agent-main",
+                lineage_id="main",
+            ),
+        )
+    )
+    base_revision_id = base_operation.revision_id or ""
+    checkpoint = service.create_checkpoint(
+        CreateCheckpointRequest(
+            root=root,
+            revision_id=base_revision_id,
+            name="safe-base",
+            approval_state=ApprovalState.APPROVED,
+            provenance=ProvenanceRecord(
+                actor_role="reviewer",
+                actor_id="human",
+                lineage_id="main",
+            ),
+        )
+    )
+
+    repo = Repository.open(root)
+    repo.create_branch("feature", start_point=base_revision_id)
+
+    story.write_text("main change\n", encoding="utf-8")
+    repo.stage(["story.txt"])
+    repo.commit("main change")
+
+    repo.checkout("feature")
+    story.write_text("feature change\n", encoding="utf-8")
+    repo.stage(["story.txt"])
+    repo.commit("feature change")
+    repo.checkout("main")
+
+    result = merge_revision(repo, "feature")
+    snapshot = service.get_repository_snapshot(root)
+    resume = service.get_resume_state(root)
+    policy = service.get_repository_policy(root)
+    state = service.get_repository_state(root)
+
+    assert result.status == "conflict"
+    assert snapshot.blockage_reason is RepositoryBlockageReason.MERGE_CONFLICTS
+    assert snapshot.safe_rollback_checkpoint_id == checkpoint.checkpoint_id
+    assert snapshot.affected_lineage_scope.scope_kind is LineageScopeKind.EXPLICIT
+    assert snapshot.affected_lineage_scope.lineage_ids == ("main", "feature")
+    assert snapshot.resume_operation == resume
+
+    assert resume is not None
+    assert resume.kind is OperationKind.MERGE
+    assert resume.blockage_reason is RepositoryBlockageReason.MERGE_CONFLICTS
+    assert resume.safe_rollback_checkpoint_id == checkpoint.checkpoint_id
+    assert resume.affected_lineage_scope.lineage_ids == ("main", "feature")
+    assert resume.state_path == repo.layout.resume_state_path("merge").as_posix()
+
+    assert policy.default_branch == "main"
+    assert policy.operations.allow_resume is True
+    assert (
+        policy.operations.safe_rollback_preference
+        is SafeRollbackPreference.LINEAGE_THEN_REPOSITORY
+    )
+    assert policy.lineage.default_affected_scope is LineageScopeKind.CURRENT
+
+    assert state.snapshot == snapshot
+    assert state.policy == policy

@@ -158,6 +158,40 @@ class OperationStatus(StrEnum):
             return cls.QUEUED
 
 
+class RepositoryBlockageReason(StrEnum):
+    NONE = "none"
+    REPOSITORY_UNINITIALIZED = "repository_uninitialized"
+    MERGE_IN_PROGRESS = "merge_in_progress"
+    MERGE_CONFLICTS = "merge_conflicts"
+    REBASE_IN_PROGRESS = "rebase_in_progress"
+    REBASE_CONFLICTS = "rebase_conflicts"
+
+    @classmethod
+    def coerce(cls, value: object | None) -> "RepositoryBlockageReason":
+        if value is None:
+            return cls.NONE
+        try:
+            return cls(str(value))
+        except ValueError:
+            return cls.NONE
+
+
+class LineageScopeKind(StrEnum):
+    NONE = "none"
+    CURRENT = "current"
+    EXPLICIT = "explicit"
+    REPOSITORY = "repository"
+
+    @classmethod
+    def coerce(cls, value: object | None) -> "LineageScopeKind":
+        if value is None:
+            return cls.NONE
+        try:
+            return cls(str(value))
+        except ValueError:
+            return cls.NONE
+
+
 @dataclass(frozen=True, slots=True)
 class ProvenanceRecord:
     actor_role: str = "unknown"
@@ -571,6 +605,135 @@ class ArtifactRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class LineageScopeRecord:
+    schema_version: int = DOMAIN_SCHEMA_VERSION
+    scope_kind: LineageScopeKind = LineageScopeKind.NONE
+    primary_lineage_id: str | None = None
+    lineage_ids: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, object]:
+        return _serialize_value(self)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object] | None) -> "LineageScopeRecord":
+        if not data:
+            return cls()
+        return cls(
+            schema_version=_default_schema_version(data),
+            scope_kind=LineageScopeKind.coerce(
+                data.get("scope_kind", data.get("scope"))
+            ),
+            primary_lineage_id=_optional_string(data.get("primary_lineage_id")),
+            lineage_ids=_string_tuple(data.get("lineage_ids")),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ResumeOperationRecord:
+    schema_version: int = DOMAIN_SCHEMA_VERSION
+    kind: OperationKind = OperationKind.MERGE
+    state_path: str | None = None
+    head_ref: str | None = None
+    current_revision_id: str | None = None
+    base_revision_id: str | None = None
+    target_revision_id: str | None = None
+    target_ref: str | None = None
+    onto_revision_id: str | None = None
+    original_head_revision_id: str | None = None
+    pending_revision_ids: tuple[str, ...] = ()
+    applied_revision_ids: tuple[str, ...] = ()
+    conflict_paths: tuple[str, ...] = ()
+    blockage_reason: RepositoryBlockageReason = RepositoryBlockageReason.NONE
+    blockage_detail: str | None = None
+    safe_rollback_checkpoint_id: str | None = None
+    affected_lineage_scope: LineageScopeRecord = field(default_factory=LineageScopeRecord)
+
+    def to_dict(self) -> dict[str, object]:
+        return _serialize_value(self)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object] | None) -> "ResumeOperationRecord":
+        if not data:
+            return cls()
+        raw_scope = data.get("affected_lineage_scope")
+        return cls(
+            schema_version=_default_schema_version(data),
+            kind=OperationKind.coerce(data.get("kind") or OperationKind.MERGE.value),
+            state_path=_optional_string(data.get("state_path")),
+            head_ref=_optional_string(data.get("head_ref")),
+            current_revision_id=_optional_string(data.get("current_revision_id")),
+            base_revision_id=_optional_string(data.get("base_revision_id")),
+            target_revision_id=_optional_string(data.get("target_revision_id")),
+            target_ref=_optional_string(data.get("target_ref")),
+            onto_revision_id=_optional_string(data.get("onto_revision_id")),
+            original_head_revision_id=_optional_string(data.get("original_head_revision_id")),
+            pending_revision_ids=_string_tuple(data.get("pending_revision_ids")),
+            applied_revision_ids=_string_tuple(data.get("applied_revision_ids")),
+            conflict_paths=_string_tuple(data.get("conflict_paths")),
+            blockage_reason=RepositoryBlockageReason.coerce(data.get("blockage_reason")),
+            blockage_detail=_optional_string(data.get("blockage_detail")),
+            safe_rollback_checkpoint_id=_optional_string(
+                data.get("safe_rollback_checkpoint_id")
+            ),
+            affected_lineage_scope=LineageScopeRecord.from_dict(
+                raw_scope if isinstance(raw_scope, Mapping) else None
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RepositorySnapshotRecord:
+    schema_version: int = DOMAIN_SCHEMA_VERSION
+    repository_root: str | None = None
+    dot_lit_dir: str | None = None
+    is_initialized: bool = False
+    default_branch: str = "main"
+    current_branch: str | None = None
+    current_lineage_id: str | None = None
+    head_ref: str | None = None
+    head_revision: str | None = None
+    latest_safe_checkpoint_id: str | None = None
+    safe_rollback_checkpoint_id: str | None = None
+    blockage_reason: RepositoryBlockageReason = RepositoryBlockageReason.NONE
+    blockage_detail: str | None = None
+    affected_lineage_scope: LineageScopeRecord = field(default_factory=LineageScopeRecord)
+    resume_operation: ResumeOperationRecord | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return _serialize_value(self)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object] | None) -> "RepositorySnapshotRecord":
+        if not data:
+            return cls()
+        raw_scope = data.get("affected_lineage_scope")
+        raw_resume = data.get("resume_operation")
+        return cls(
+            schema_version=_default_schema_version(data),
+            repository_root=_optional_string(data.get("repository_root")),
+            dot_lit_dir=_optional_string(data.get("dot_lit_dir")),
+            is_initialized=bool(data.get("is_initialized", False)),
+            default_branch=_string(data.get("default_branch"), default="main"),
+            current_branch=_optional_string(data.get("current_branch")),
+            current_lineage_id=_optional_string(data.get("current_lineage_id")),
+            head_ref=_optional_string(data.get("head_ref")),
+            head_revision=_optional_string(data.get("head_revision")),
+            latest_safe_checkpoint_id=_optional_string(data.get("latest_safe_checkpoint_id")),
+            safe_rollback_checkpoint_id=_optional_string(
+                data.get("safe_rollback_checkpoint_id")
+            ),
+            blockage_reason=RepositoryBlockageReason.coerce(data.get("blockage_reason")),
+            blockage_detail=_optional_string(data.get("blockage_detail")),
+            affected_lineage_scope=LineageScopeRecord.from_dict(
+                raw_scope if isinstance(raw_scope, Mapping) else None
+            ),
+            resume_operation=ResumeOperationRecord.from_dict(raw_resume)
+            if isinstance(raw_resume, Mapping)
+            else None,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class OperationRecord:
     schema_version: int = DOMAIN_SCHEMA_VERSION
     operation_id: str | None = None
@@ -624,13 +787,18 @@ __all__ = [
     "ApprovalState",
     "ArtifactRecord",
     "CheckpointRecord",
+    "LineageScopeKind",
+    "LineageScopeRecord",
     "LineageRecord",
     "OperationKind",
     "OperationRecord",
     "OperationStatus",
     "ProvenanceInput",
     "ProvenanceRecord",
+    "RepositoryBlockageReason",
+    "RepositorySnapshotRecord",
     "RevisionRecord",
+    "ResumeOperationRecord",
     "StepPolicyRecord",
     "StepRecord",
     "VerificationRecord",

@@ -6,16 +6,22 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from lit.config import LitConfig, read_lit_config
 from lit.commits import CommitMetadata, CommitRecord, serialize_commit
 from lit.doctor import DoctorReport, run_doctor
 from lit.domain import (
     ApprovalState,
     CheckpointRecord,
+    LineageScopeKind,
+    LineageScopeRecord,
     OperationKind,
     OperationRecord,
     OperationStatus,
     ProvenanceRecord,
+    RepositoryBlockageReason,
+    RepositorySnapshotRecord,
     RevisionRecord,
+    ResumeOperationRecord,
     StepPolicyRecord,
     StepRecord,
     VerificationRecord,
@@ -23,6 +29,8 @@ from lit.domain import (
 )
 from lit.export_git import GitExportPlan, build_git_export_plan
 from lit.layout import LitLayout
+from lit.refs import branch_name_from_ref
+from lit.state import OperationState
 from lit.storage import write_json
 from lit.transactions import next_identifier, utc_now
 from lit.verification import VerificationStatusSummary
@@ -45,6 +53,8 @@ class RepositoryHandle:
     current_lineage_id: str | None = None
     latest_safe_checkpoint_id: str | None = None
     is_initialized: bool = False
+    policy: LitConfig = field(default_factory=LitConfig)
+    snapshot: RepositorySnapshotRecord | None = None
 
     @classmethod
     def for_root(
@@ -57,17 +67,42 @@ class RepositoryHandle:
         current_lineage_id: str | None = None,
         latest_safe_checkpoint_id: str | None = None,
         is_initialized: bool = False,
+        policy: LitConfig | None = None,
+        snapshot: RepositorySnapshotRecord | None = None,
     ) -> "RepositoryHandle":
         resolved = root.expanduser().resolve()
+        effective_policy = policy or LitConfig(default_branch=default_branch)
+        effective_snapshot = snapshot or RepositorySnapshotRecord(
+            repository_root=resolved.as_posix(),
+            dot_lit_dir=LitLayout(resolved).dot_lit.as_posix(),
+            is_initialized=is_initialized,
+            default_branch=effective_policy.default_branch,
+            current_branch=current_branch,
+            current_lineage_id=current_lineage_id,
+            head_revision=head_revision,
+            latest_safe_checkpoint_id=latest_safe_checkpoint_id,
+            safe_rollback_checkpoint_id=latest_safe_checkpoint_id,
+            affected_lineage_scope=LineageScopeRecord(
+                scope_kind=LineageScopeKind.CURRENT
+                if current_lineage_id is not None
+                else LineageScopeKind.NONE,
+                primary_lineage_id=current_lineage_id,
+                lineage_ids=()
+                if current_lineage_id is None
+                else (current_lineage_id,),
+            ),
+        )
         return cls(
             root=resolved,
             layout=LitLayout(resolved),
-            default_branch=default_branch,
-            current_branch=current_branch,
-            head_revision=head_revision,
-            current_lineage_id=current_lineage_id,
-            latest_safe_checkpoint_id=latest_safe_checkpoint_id,
-            is_initialized=is_initialized,
+            default_branch=effective_snapshot.default_branch,
+            current_branch=effective_snapshot.current_branch,
+            head_revision=effective_snapshot.head_revision,
+            current_lineage_id=effective_snapshot.current_lineage_id,
+            latest_safe_checkpoint_id=effective_snapshot.latest_safe_checkpoint_id,
+            is_initialized=effective_snapshot.is_initialized,
+            policy=effective_policy,
+            snapshot=effective_snapshot,
         )
 
 
@@ -385,6 +420,18 @@ class BackendService(ABC):
         """Return the current repository, branch, revision, and checkpoint pointers."""
 
     @abstractmethod
+    def get_repository_snapshot(self, root: Path) -> RepositorySnapshotRecord:
+        """Return the canonical repository snapshot for CLI, GUI, and orchestration surfaces."""
+
+    @abstractmethod
+    def get_resume_state(self, root: Path) -> ResumeOperationRecord | None:
+        """Return the resumable merge/rebase descriptor when work is blocked or in progress."""
+
+    @abstractmethod
+    def get_repository_policy(self, root: Path) -> LitConfig:
+        """Load the explicit `.lit/config.json` policy contract."""
+
+    @abstractmethod
     def get_current_revision(self, root: Path) -> RevisionRecord | None:
         """Resolve the currently checked out revision record."""
 
@@ -531,6 +578,11 @@ class LitBackendService(BackendService):
                 root,
                 default_branch=request.default_branch,
                 is_initialized=False,
+                policy=LitConfig(default_branch=request.default_branch),
+                snapshot=self._uninitialized_snapshot(
+                    root,
+                    default_branch=request.default_branch,
+                ),
             )
         return self._handle_for_repository(Repository.open(root))
 
@@ -547,6 +599,24 @@ class LitBackendService(BackendService):
         from lit.repository import Repository
 
         return self._handle_for_repository(Repository.open(root))
+
+    def get_repository_snapshot(self, root: Path) -> RepositorySnapshotRecord:
+        resolved = root.expanduser().resolve()
+        if not (resolved / ".lit").is_dir():
+            return self._uninitialized_snapshot(resolved)
+        return self._snapshot_for_repository(self._repository(resolved))
+
+    def get_resume_state(self, root: Path) -> ResumeOperationRecord | None:
+        resolved = root.expanduser().resolve()
+        if not (resolved / ".lit").is_dir():
+            return None
+        return self._resume_state_for_repository(self._repository(resolved))
+
+    def get_repository_policy(self, root: Path) -> LitConfig:
+        resolved = root.expanduser().resolve()
+        if not (resolved / ".lit").is_dir():
+            return LitConfig()
+        return read_lit_config(LitLayout(resolved))
 
     def get_current_revision(self, root: Path) -> RevisionRecord | None:
         return self._repository(root).current_revision()
@@ -816,17 +886,189 @@ class LitBackendService(BackendService):
         return Repository.open(root.expanduser().resolve())
 
     def _handle_for_repository(self, repo) -> RepositoryHandle:
-        current_branch = repo.current_branch_name()
+        policy = read_lit_config(repo.layout)
+        snapshot = self._snapshot_for_repository(repo, policy=policy)
         return RepositoryHandle.for_root(
             repo.root,
-            default_branch=repo.config.default_branch,
-            current_branch=current_branch,
-            head_revision=repo.current_commit_id(),
-            current_lineage_id=current_branch,
-            latest_safe_checkpoint_id=repo.latest_safe_checkpoint_id(lineage_id=current_branch)
-            or repo.latest_safe_checkpoint_id(),
-            is_initialized=True,
+            policy=policy,
+            snapshot=snapshot,
         )
+
+    def _uninitialized_snapshot(
+        self,
+        root: Path,
+        *,
+        default_branch: str = "main",
+    ) -> RepositorySnapshotRecord:
+        layout = LitLayout(root)
+        return RepositorySnapshotRecord(
+            repository_root=root.as_posix(),
+            dot_lit_dir=layout.dot_lit.as_posix(),
+            is_initialized=False,
+            default_branch=default_branch,
+            blockage_reason=RepositoryBlockageReason.REPOSITORY_UNINITIALIZED,
+            blockage_detail="Repository has not been initialized.",
+        )
+
+    def _snapshot_for_repository(
+        self,
+        repo,
+        *,
+        policy: LitConfig | None = None,
+    ) -> RepositorySnapshotRecord:
+        resolved_policy = policy or read_lit_config(repo.layout)
+        current_branch = repo.current_branch_name()
+        latest_safe_checkpoint_id = repo.latest_safe_checkpoint_id(lineage_id=current_branch) or repo.latest_safe_checkpoint_id()
+        resume_operation = self._resume_state_for_repository(
+            repo,
+            safe_rollback_checkpoint_id=latest_safe_checkpoint_id,
+        )
+        blockage_reason = (
+            resume_operation.blockage_reason
+            if resume_operation is not None
+            else RepositoryBlockageReason.NONE
+        )
+        blockage_detail = resume_operation.blockage_detail if resume_operation is not None else None
+        affected_lineage_scope = (
+            resume_operation.affected_lineage_scope
+            if resume_operation is not None
+            else self._lineage_scope(current_branch)
+        )
+        return RepositorySnapshotRecord(
+            repository_root=repo.root.as_posix(),
+            dot_lit_dir=repo.layout.dot_lit.as_posix(),
+            is_initialized=True,
+            default_branch=resolved_policy.default_branch,
+            current_branch=current_branch,
+            current_lineage_id=current_branch,
+            head_ref=repo.current_head_ref(),
+            head_revision=repo.current_commit_id(),
+            latest_safe_checkpoint_id=latest_safe_checkpoint_id,
+            safe_rollback_checkpoint_id=latest_safe_checkpoint_id,
+            blockage_reason=blockage_reason,
+            blockage_detail=blockage_detail,
+            affected_lineage_scope=affected_lineage_scope,
+            resume_operation=resume_operation,
+        )
+
+    def _resume_state_for_repository(
+        self,
+        repo,
+        *,
+        safe_rollback_checkpoint_id: str | None = None,
+    ) -> ResumeOperationRecord | None:
+        operation = repo.current_operation()
+        if operation is None:
+            return None
+        rollback_target = safe_rollback_checkpoint_id
+        if rollback_target is None:
+            current_branch = repo.current_branch_name()
+            rollback_target = repo.latest_safe_checkpoint_id(lineage_id=current_branch) or repo.latest_safe_checkpoint_id()
+        if operation.kind == "merge":
+            return self._merge_resume_record(
+                repo,
+                operation,
+                safe_rollback_checkpoint_id=rollback_target,
+            )
+        return self._rebase_resume_record(
+            repo,
+            operation,
+            safe_rollback_checkpoint_id=rollback_target,
+        )
+
+    def _merge_resume_record(
+        self,
+        repo,
+        operation: OperationState,
+        *,
+        safe_rollback_checkpoint_id: str | None,
+    ) -> ResumeOperationRecord:
+        state = operation.state
+        target_lineage = branch_name_from_ref(state.target_ref) if state.target_ref else None
+        affected_lineage_scope = self._lineage_scope(
+            repo.current_branch_name(),
+            target_lineage,
+        )
+        blockage_reason = (
+            RepositoryBlockageReason.MERGE_CONFLICTS
+            if state.conflicts
+            else RepositoryBlockageReason.MERGE_IN_PROGRESS
+        )
+        return ResumeOperationRecord(
+            kind=OperationKind.MERGE,
+            state_path=repo.layout.resume_state_path("merge").as_posix(),
+            head_ref=state.head_ref,
+            current_revision_id=state.current_commit,
+            base_revision_id=state.base_commit,
+            target_revision_id=state.target_commit,
+            target_ref=state.target_ref,
+            pending_revision_ids=(state.target_commit,),
+            conflict_paths=state.conflicts,
+            blockage_reason=blockage_reason,
+            blockage_detail=self._blockage_detail("merge", state.conflicts),
+            safe_rollback_checkpoint_id=safe_rollback_checkpoint_id,
+            affected_lineage_scope=affected_lineage_scope,
+        )
+
+    def _rebase_resume_record(
+        self,
+        repo,
+        operation: OperationState,
+        *,
+        safe_rollback_checkpoint_id: str | None,
+    ) -> ResumeOperationRecord:
+        state = operation.state
+        current_lineage = repo.current_branch_name()
+        blockage_reason = (
+            RepositoryBlockageReason.REBASE_CONFLICTS
+            if state.conflicts
+            else RepositoryBlockageReason.REBASE_IN_PROGRESS
+        )
+        return ResumeOperationRecord(
+            kind=OperationKind.REBASE,
+            state_path=repo.layout.resume_state_path("rebase").as_posix(),
+            head_ref=state.head_ref,
+            current_revision_id=state.current_commit or state.original_head,
+            onto_revision_id=state.onto,
+            original_head_revision_id=state.original_head,
+            pending_revision_ids=state.pending_commits,
+            applied_revision_ids=state.applied_commits,
+            conflict_paths=state.conflicts,
+            blockage_reason=blockage_reason,
+            blockage_detail=self._blockage_detail("rebase", state.conflicts),
+            safe_rollback_checkpoint_id=safe_rollback_checkpoint_id,
+            affected_lineage_scope=self._lineage_scope(current_lineage),
+        )
+
+    def _lineage_scope(
+        self,
+        primary_lineage_id: str | None,
+        *related_lineage_ids: str | None,
+    ) -> LineageScopeRecord:
+        ordered: list[str] = []
+        for lineage_id in (primary_lineage_id, *related_lineage_ids):
+            if lineage_id is None or lineage_id in ordered:
+                continue
+            ordered.append(lineage_id)
+        if not ordered:
+            return LineageScopeRecord()
+        scope_kind = (
+            LineageScopeKind.CURRENT
+            if len(ordered) == 1
+            else LineageScopeKind.EXPLICIT
+        )
+        return LineageScopeRecord(
+            scope_kind=scope_kind,
+            primary_lineage_id=ordered[0],
+            lineage_ids=tuple(ordered),
+        )
+
+    def _blockage_detail(self, kind: str, conflicts: tuple[str, ...]) -> str:
+        if conflicts:
+            listed = ", ".join(conflicts[:3])
+            suffix = "" if len(conflicts) <= 3 else ", ..."
+            return f"{kind} blocked by conflicts: {listed}{suffix}"
+        return f"{kind} can be resumed"
 
     def _link_artifacts(
         self,

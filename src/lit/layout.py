@@ -10,6 +10,7 @@ from lit.refs import normalize_branch_name
 
 LAYOUT_SCHEMA_VERSION = 1
 ObjectKind = Literal["blobs", "trees", "commits"]
+ResumeStateKind = Literal["merge", "rebase"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,10 @@ class LitLayout:
     @property
     def config(self) -> Path:
         return self.dot_lit / "config.json"
+
+    @property
+    def policy_config(self) -> Path:
+        return self.config
 
     @property
     def head(self) -> Path:
@@ -85,6 +90,13 @@ class LitLayout:
     @property
     def rebase_state(self) -> Path:
         return self.state / "rebase.json"
+
+    def resume_state_path(self, kind: ResumeStateKind) -> Path:
+        if kind == "merge":
+            return self.merge_state
+        if kind == "rebase":
+            return self.rebase_state
+        raise ValueError(f"unsupported resume state kind: {kind}")
 
     @property
     def v1(self) -> Path:
@@ -203,5 +215,4 @@ class LitLayout:
             self.locks,
         )
 
-
-__all__ = ["LAYOUT_SCHEMA_VERSION", "LitLayout", "ObjectKind"]
+__all__ = ["LAYOUT_SCHEMA_VERSION", "LitLayout", "ObjectKind", "ResumeStateKind"]

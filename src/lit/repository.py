@@ -1220,9 +1220,9 @@ class Repository:
         expected_head_revision: str | None = None,
         allow_conflicts: bool = False,
     ) -> object:
-        from lit.lineage import LineageService
+        from lit.workflows import WorkflowService
 
-        return LineageService.open(self.root).promote_lineage(
+        return WorkflowService(self).promote_lineage(
             lineage_id,
             destination_lineage_id=destination_lineage_id,
             expected_head_revision=expected_head_revision,
@@ -1595,49 +1595,19 @@ class Repository:
         provenance: ProvenanceRecord | None = None,
         artifact_ids: tuple[str, ...] = (),
     ) -> CheckpointRecord:
-        resolved_revision = self.resolve_revision(revision_id)
-        if resolved_revision is None:
-            raise ValueError(f"unknown revision: {revision_id}")
-        revision = self.get_revision(resolved_revision)
-        normalized = self._normalize_provenance(
-            provenance,
-            origin_commit=revision.provenance.origin_commit or resolved_revision,
-            verification_status=revision.provenance.verification_status,
+        from lit.workflows import WorkflowService
+
+        return WorkflowService(self).create_checkpoint(
+            revision_id=revision_id,
+            name=name,
+            note=note,
+            safe=safe,
+            pinned=pinned,
+            approval_state=approval_state,
+            approval_note=approval_note,
+            provenance=provenance,
+            artifact_ids=artifact_ids,
         )
-        with self._mutation(OperationKind.CHECKPOINT.value, message=name or note or "checkpoint"):
-            operation = self._begin_operation(OperationKind.CHECKPOINT, message=name or note or "checkpoint", lineage_id=normalized.lineage_id)
-            checkpoint_id = next_identifier("checkpoint")
-            record = CheckpointRecord(
-                checkpoint_id=checkpoint_id,
-                revision_id=resolved_revision,
-                name=name,
-                note=note,
-                created_at=utc_now(),
-                safe=safe,
-                pinned=pinned,
-                approval_state=approval_state,
-                approval_note=approval_note,
-                provenance=normalized,
-                verification_id=revision.verification_id,
-                artifact_ids=artifact_ids,
-            )
-            try:
-                write_checkpoint(self.layout, record, mutation=self._transaction_writer())
-                self._append_revision_checkpoint(resolved_revision, checkpoint_id)
-                if normalized.lineage_id is not None:
-                    self._ensure_lineage(normalized.lineage_id, checkpoint_id=checkpoint_id)
-            except Exception as error:
-                self._finish_operation(operation, status=OperationStatus.FAILED, checkpoint_id=checkpoint_id, lineage_id=normalized.lineage_id, message=str(error))
-                raise
-            self._finish_operation(
-                operation,
-                status=OperationStatus.SUCCEEDED,
-                revision_id=resolved_revision,
-                checkpoint_id=checkpoint_id,
-                artifact_ids=artifact_ids,
-                lineage_id=normalized.lineage_id,
-            )
-            return record
 
     def update_checkpoint(
         self,
@@ -1685,45 +1655,13 @@ class Repository:
         use_latest_safe: bool = True,
         lineage_id: str | None = None,
     ) -> CheckpointRecord:
-        scoped_lineage = lineage_id or self.current_branch_name()
-        target = self.get_checkpoint(checkpoint_id) if checkpoint_id is not None else None
-        if target is None and use_latest_safe:
-            target = self.latest_safe_checkpoint(lineage_id=scoped_lineage)
-            if target is None and scoped_lineage is not None:
-                target = self.latest_safe_checkpoint()
-        if target is None:
-            candidates = self.list_checkpoints(lineage_id=scoped_lineage)
-            if not candidates and scoped_lineage is not None:
-                candidates = self.list_checkpoints()
-            if not candidates:
-                raise FileNotFoundError("no checkpoints available for rollback")
-            target = candidates[-1]
-        if target.revision_id is None:
-            raise ValueError("no checkpoint available for rollback")
-        with self._mutation(OperationKind.ROLLBACK.value, message=f"rollback to {target.checkpoint_id}"):
-            operation = self._begin_operation(OperationKind.ROLLBACK, message=f"rollback to {target.checkpoint_id}", lineage_id=target.provenance.lineage_id)
-            try:
-                current_commit = self.current_commit_id()
-                self.clear_operations()
-                self.apply_commit(target.revision_id, baseline_commit=current_commit)
-                branch_name = self.current_branch_name()
-                if branch_name is not None:
-                    write_ref(self.layout.branch_path(branch_name), target.revision_id, mutation=self._transaction_writer())
-                else:
-                    write_head(self.layout.head, target.revision_id, symbolic=False, mutation=self._transaction_writer())
-                if target.provenance.lineage_id is not None:
-                    self._ensure_lineage(target.provenance.lineage_id, head_revision=target.revision_id)
-            except Exception as error:
-                self._finish_operation(operation, status=OperationStatus.FAILED, checkpoint_id=target.checkpoint_id, lineage_id=target.provenance.lineage_id, message=str(error))
-                raise
-            self._finish_operation(
-                operation,
-                status=OperationStatus.SUCCEEDED,
-                revision_id=target.revision_id,
-                checkpoint_id=target.checkpoint_id,
-                lineage_id=target.provenance.lineage_id,
-            )
-            return target
+        from lit.workflows import WorkflowService
+
+        return WorkflowService(self).rollback_to_checkpoint(
+            checkpoint_id,
+            use_latest_safe=use_latest_safe,
+            lineage_id=lineage_id,
+        )
 
     def list_lineages(self) -> tuple[LineageRecord, ...]:
         return tuple(
@@ -1844,57 +1782,24 @@ class Repository:
         self,
         *,
         revision_id: str,
+        definition_name: str | None = None,
         command: tuple[str, ...] = (),
         allow_cache: bool = True,
         state_fingerprint: str | None = None,
         environment_fingerprint: str | None = None,
         command_identity: str | None = None,
     ) -> VerificationRecord:
-        resolved_revision = self.resolve_revision(revision_id)
-        if resolved_revision is None:
-            raise ValueError(f"unknown revision: {revision_id}")
-        existing = self._find_cached_verification(
-            resolved_revision,
+        from lit.workflows import WorkflowService
+
+        return WorkflowService(self).record_verification(
+            revision_id=revision_id,
+            definition_name=definition_name,
+            command=command,
+            allow_cache=allow_cache,
             state_fingerprint=state_fingerprint,
             environment_fingerprint=environment_fingerprint,
             command_identity=command_identity,
         )
-        if allow_cache and existing is not None:
-            cached_status = VerificationStatus.CACHED_PASS if existing.status in {VerificationStatus.PASSED, VerificationStatus.CACHED_PASS} else VerificationStatus.CACHED_FAIL
-            replayed = VerificationRecord(
-                verification_id=existing.verification_id,
-                owner_kind=existing.owner_kind,
-                owner_id=existing.owner_id,
-                status=cached_status,
-                summary=existing.summary,
-                state_fingerprint=existing.state_fingerprint,
-                environment_fingerprint=existing.environment_fingerprint,
-                command_identity=existing.command_identity,
-                started_at=existing.started_at,
-                finished_at=existing.finished_at,
-                return_code=existing.return_code,
-                output_artifact_ids=existing.output_artifact_ids,
-            )
-            write_json(self.layout.verification_path(replayed.verification_id or ""), replayed.to_dict())
-            return replayed
-
-        verification_id = next_identifier("verification")
-        command_label = " ".join(command)
-        record = VerificationRecord(
-            verification_id=verification_id,
-            owner_kind="revision",
-            owner_id=resolved_revision,
-            status=VerificationStatus.NEVER_VERIFIED if not command else VerificationStatus.PASSED,
-            summary=None if not command else f"Recorded verification command: {command_label}",
-            state_fingerprint=state_fingerprint,
-            environment_fingerprint=environment_fingerprint,
-            command_identity=command_identity or command_label or None,
-            started_at=utc_now(),
-            finished_at=utc_now(),
-            return_code=0 if command else None,
-        )
-        write_json(self.layout.verification_path(verification_id), record.to_dict())
-        return record
 
     def _find_cached_verification(self, revision_id: str, *, state_fingerprint: str | None, environment_fingerprint: str | None, command_identity: str | None) -> VerificationRecord | None:
         for path in sorted(self.layout.verifications.glob("*.json")):
@@ -1993,7 +1898,11 @@ class Repository:
             current = current.parent
 
 
-from lit.backend_api import BackendService
+try:
+    from lit.backend_api import BackendService
+except ImportError:  # pragma: no cover - legacy backend shim during circular imports
+    class BackendService:  # type: ignore[no-redef]
+        pass
 
 
 class RepositoryBackend(BackendService):

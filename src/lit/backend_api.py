@@ -34,6 +34,7 @@ from lit.state import OperationState
 from lit.storage import write_json
 from lit.transactions import next_identifier, utc_now
 from lit.verification import VerificationStatusSummary
+from lit.workflows import WorkflowService
 
 
 @dataclass(frozen=True, slots=True)
@@ -700,7 +701,7 @@ class LitBackendService(BackendService):
 
     def create_checkpoint(self, request: CreateCheckpointRequest) -> OperationRecord:
         repo = self._repository(request.root)
-        checkpoint = repo.create_checkpoint(
+        checkpoint = WorkflowService(repo).create_checkpoint(
             revision_id=request.revision_id,
             name=request.name,
             note=request.note,
@@ -730,7 +731,7 @@ class LitBackendService(BackendService):
 
     def rollback_to_checkpoint(self, request: RollbackRequest) -> OperationRecord:
         repo = self._repository(request.root)
-        checkpoint = repo.rollback_to_checkpoint(
+        checkpoint = WorkflowService(repo).rollback_to_checkpoint(
             request.checkpoint_id,
             use_latest_safe=request.use_latest_safe,
             lineage_id=request.lineage_id,
@@ -793,7 +794,7 @@ class LitBackendService(BackendService):
 
     def promote_lineage(self, request: PromoteLineageRequest) -> OperationRecord:
         repo = self._repository(request.root)
-        result = repo.promote_lineage(
+        result = WorkflowService(repo).promote_lineage(
             request.lineage_id,
             destination_lineage_id=request.destination_lineage_id,
             expected_head_revision=request.expected_head_revision,
@@ -813,15 +814,12 @@ class LitBackendService(BackendService):
 
     def record_verification(self, request: VerifyRevisionRequest) -> VerificationRecord:
         repo = self._repository(request.root)
-        revision = repo.get_revision(request.revision_id)
-        state_fingerprint = request.state_fingerprint or revision.tree
-        return repo.run_verification(
-            owner_kind="revision",
-            owner_id=revision.revision_id,
+        return WorkflowService(repo).record_verification(
+            revision_id=request.revision_id,
             definition_name=request.definition_name,
             command=request.command,
             command_identity=request.command_identity,
-            state_fingerprint=state_fingerprint,
+            state_fingerprint=request.state_fingerprint,
             environment_fingerprint=request.environment_fingerprint,
             allow_cache=request.allow_cache,
         )
@@ -918,7 +916,10 @@ class LitBackendService(BackendService):
     ) -> RepositorySnapshotRecord:
         resolved_policy = policy or read_lit_config(repo.layout)
         current_branch = repo.current_branch_name()
-        latest_safe_checkpoint_id = repo.latest_safe_checkpoint_id(lineage_id=current_branch) or repo.latest_safe_checkpoint_id()
+        workflow = WorkflowService(repo)
+        latest_safe_checkpoint_id = workflow.safe_rollback_checkpoint_id(
+            lineage_id=current_branch
+        )
         resume_operation = self._resume_state_for_repository(
             repo,
             safe_rollback_checkpoint_id=latest_safe_checkpoint_id,
@@ -962,8 +963,9 @@ class LitBackendService(BackendService):
             return None
         rollback_target = safe_rollback_checkpoint_id
         if rollback_target is None:
-            current_branch = repo.current_branch_name()
-            rollback_target = repo.latest_safe_checkpoint_id(lineage_id=current_branch) or repo.latest_safe_checkpoint_id()
+            rollback_target = WorkflowService(repo).safe_rollback_checkpoint_id(
+                lineage_id=repo.current_branch_name()
+            )
         if operation.kind == "merge":
             return self._merge_resume_record(
                 repo,

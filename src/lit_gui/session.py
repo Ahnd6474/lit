@@ -13,9 +13,10 @@ from lit.backend_api import (
     RollbackRequest,
     VerifyRevisionRequest,
 )
-from lit.merge_ops import MergeResult, merge_revision
-from lit.rebase_ops import RebaseResult, rebase_onto
+from lit.merge_ops import MergeResult
+from lit.rebase_ops import RebaseResult
 from lit.repository import CheckoutRecord, Repository
+from lit.workflows import WorkflowService
 from lit_gui.backend import SnapshotFeedback, SnapshotSelections, build_snapshot
 from lit_gui.contracts import RepositorySession, SessionSnapshot
 from lit_gui.persistence import RecentRepositoriesStore
@@ -367,26 +368,15 @@ class LitRepositorySession(RepositorySession):
         )
 
     def merge(self, revision: str) -> SessionSnapshot:
-        return self._run_repository_action(
-            lambda repository: merge_revision(repository, revision),
+        return self._run_workflow_action(
+            lambda workflow: workflow.merge_revision(revision),
             on_success=self._merge_feedback,
             update_selections=self._merge_selections,
         )
 
     def abort_merge(self) -> SessionSnapshot:
-        def abort(repository: Repository) -> str:
-            state = repository.read_merge_state()
-            if state is None:
-                raise ValueError("No merge in progress.")
-            repository.apply_commit(
-                state.current_commit,
-                baseline_commit=repository.current_commit_id(),
-            )
-            repository.clear_merge()
-            return state.current_commit
-
-        return self._run_repository_action(
-            abort,
+        return self._run_workflow_action(
+            lambda workflow: workflow.abort_merge(),
             on_success=lambda _: SnapshotFeedback(level="success", message="Merge state cleared."),
             update_selections=lambda commit_id: replace(
                 self._selections,
@@ -396,29 +386,15 @@ class LitRepositorySession(RepositorySession):
         )
 
     def rebase(self, revision: str) -> SessionSnapshot:
-        return self._run_repository_action(
-            lambda repository: rebase_onto(repository, revision),
+        return self._run_workflow_action(
+            lambda workflow: workflow.rebase_onto(revision),
             on_success=self._rebase_feedback,
             update_selections=self._rebase_selections,
         )
 
     def abort_rebase(self) -> SessionSnapshot:
-        def abort(repository: Repository) -> str:
-            state = repository.read_rebase_state()
-            if state is None:
-                raise ValueError("No rebase in progress.")
-            branch_name = repository.current_branch_name()
-            if branch_name is not None:
-                repository.write_branch(branch_name, state.original_head)
-            repository.apply_commit(
-                state.original_head,
-                baseline_commit=repository.current_commit_id(),
-            )
-            repository.clear_rebase()
-            return state.original_head
-
-        return self._run_repository_action(
-            abort,
+        return self._run_workflow_action(
+            lambda workflow: workflow.abort_rebase(),
             on_success=lambda _: SnapshotFeedback(level="success", message="Rebase state cleared."),
             update_selections=lambda commit_id: replace(
                 self._selections,
@@ -449,6 +425,35 @@ class LitRepositorySession(RepositorySession):
 
         try:
             result = operation(repository)
+        except (FileNotFoundError, RuntimeError, ValueError) as error:
+            self._repository = self._reload_repository(self._root)
+            return self._rebuild_snapshot(
+                feedback=SnapshotFeedback(level="error", message=str(error))
+            )
+
+        if update_selections is not None:
+            self._selections = update_selections(result)
+        self._repository = self._reload_repository(self._root)
+        return self._rebuild_snapshot(feedback=on_success(result))
+
+    def _run_workflow_action(
+        self,
+        operation: Callable[[WorkflowService], _T],
+        *,
+        on_success: Callable[[_T], SnapshotFeedback],
+        update_selections: Callable[[_T], SnapshotSelections] | None = None,
+    ) -> SessionSnapshot:
+        repository = self._repository
+        if repository is None:
+            return self._rebuild_snapshot(
+                feedback=SnapshotFeedback(
+                    level="error",
+                    message="Open or initialize a repository first.",
+                )
+            )
+
+        try:
+            result = operation(WorkflowService(repository))
         except (FileNotFoundError, RuntimeError, ValueError) as error:
             self._repository = self._reload_repository(self._root)
             return self._rebuild_snapshot(

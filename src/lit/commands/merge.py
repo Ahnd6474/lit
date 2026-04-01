@@ -3,13 +3,18 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from lit.merge_ops import merge_revision
-from lit.repository import Repository
+from lit.workflows import WorkflowService
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser("merge", help="Merge another local revision into the current branch.")
     parser.add_argument("revision", nargs="?", help="Branch or commit to merge.")
+    parser.add_argument(
+        "--continue",
+        dest="continue_merge",
+        action="store_true",
+        help="Continue a merge after resolving conflicts.",
+    )
     parser.add_argument(
         "--abort",
         action="store_true",
@@ -19,20 +24,32 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 
 
 def run(args: argparse.Namespace) -> int:
-    repository = Repository.discover(Path.cwd())
+    workflow = WorkflowService.open(Path.cwd())
+    repository = workflow.repository
     state = repository.read_merge_state()
+    if args.continue_merge and args.revision:
+        print("Specify either a revision or --continue.")
+        return 1
     if args.abort:
         if state is None:
             print("No merge in progress.")
             return 1
-        repository.apply_commit(state.current_commit, baseline_commit=repository.current_commit_id())
-        repository.clear_merge()
+        workflow.abort_merge()
         print("Merge state cleared.")
+        return 0
+
+    if args.continue_merge:
+        try:
+            result = workflow.continue_merge()
+        except ValueError as error:
+            print(str(error))
+            return 1
+        print(result.message)
         return 0
 
     if args.revision:
         try:
-            result = merge_revision(repository, args.revision)
+            result = workflow.merge_revision(args.revision)
         except ValueError as error:
             print(str(error))
             return 1

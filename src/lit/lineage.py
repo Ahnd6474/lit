@@ -6,6 +6,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from lit.config import read_lit_config
 from lit.domain import LineageRecord as DomainLineageRecord
 from lit.layout import LitLayout
 from lit.refs import delete_ref, normalize_branch_name, write_ref
@@ -727,9 +728,12 @@ class LineageService:
         destination_lineage_id: str | None = None,
     ) -> PromotionPreview:
         repo = self._repository()
+        policy = read_lit_config(self.layout)
         source = self.get_lineage(lineage_id)
         destination_id = normalize_branch_name(
-            destination_lineage_id or repo.current_branch_name() or repo.config.default_branch
+            destination_lineage_id
+            or repo.current_branch_name()
+            or policy.default_branch
         )
         destination = self.get_lineage(destination_id)
         baseline_revision = self._baseline_revision(repo, source, destination)
@@ -933,6 +937,7 @@ class LineageService:
         forked_from: str | None,
         base_checkpoint_id: str | None,
     ) -> str | None:
+        policy = read_lit_config(self.layout)
         if base_checkpoint_id is not None:
             repo.get_checkpoint(base_checkpoint_id)
             return base_checkpoint_id
@@ -941,15 +946,17 @@ class LineageService:
             return forked_from
         lineage_id = repo.resolve_branch_name(forked_from) if forked_from is not None else repo.current_branch_name()
         if lineage_id is not None:
-            checkpoint_id = repo.latest_safe_checkpoint_id(lineage_id=lineage_id)
-            if checkpoint_id is not None:
-                return checkpoint_id
+            if policy.lineage.default_base_checkpoint_strategy == "latest_safe":
+                checkpoint_id = repo.latest_safe_checkpoint_id(lineage_id=lineage_id)
+                if checkpoint_id is not None:
+                    return checkpoint_id
             lineage_checkpoints = repo.list_checkpoints(lineage_id=lineage_id)
             if lineage_checkpoints:
                 return lineage_checkpoints[-1].checkpoint_id
-        checkpoint_id = repo.latest_safe_checkpoint_id()
-        if checkpoint_id is not None:
-            return checkpoint_id
+        if policy.lineage.default_base_checkpoint_strategy == "latest_safe":
+            checkpoint_id = repo.latest_safe_checkpoint_id()
+            if checkpoint_id is not None:
+                return checkpoint_id
         checkpoints = repo.list_checkpoints()
         return None if not checkpoints else checkpoints[-1].checkpoint_id
 

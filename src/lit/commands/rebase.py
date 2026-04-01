@@ -25,50 +25,62 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 
 def run(args: argparse.Namespace) -> int:
     workflow = WorkflowService.open(Path.cwd())
-    repository = workflow.repository
-    state = repository.read_rebase_state()
     if args.continue_rebase and args.revision:
         print("Specify either a revision or --continue.")
         return 1
     if args.abort:
-        if state is None:
-            print("No rebase in progress.")
-            return 1
-        workflow.abort_rebase()
-        print("Rebase state cleared.")
-        return 0
+        return _abort_rebase(workflow)
 
     if args.continue_rebase:
-        try:
-            result = workflow.continue_rebase()
-        except ValueError as error:
-            print(str(error))
-            return 1
-        print(result.message)
-        return 0
+        return _continue_rebase(workflow)
 
     if args.revision:
-        try:
-            result = workflow.rebase_onto(args.revision)
-        except ValueError as error:
-            print(str(error))
-            return 1
-        print(result.message)
-        if result.conflicts:
-            print("conflicts:")
-            for path in result.conflicts:
-                print(f"  {path}")
-            return 1
-        return 0
+        return _rebase_revision(workflow, args.revision)
 
+    state = workflow.repository.read_rebase_state()
     if state is None:
         print("No rebase in progress.")
         return 1
 
     print(f"rebase in progress onto {state.onto[:12]}")
     print(f"pending commits: {len(state.pending_commits)}")
-    if state.conflicts:
-        print("conflicts:")
-        for path in state.conflicts:
-            print(f"  {path}")
+    _print_conflicts(state.conflicts)
     return 0
+
+
+def _abort_rebase(workflow: WorkflowService) -> int:
+    if workflow.repository.read_rebase_state() is None:
+        print("No rebase in progress.")
+        return 1
+    workflow.abort_rebase()
+    print("Rebase state cleared.")
+    return 0
+
+
+def _continue_rebase(workflow: WorkflowService) -> int:
+    try:
+        result = workflow.continue_rebase()
+    except ValueError as error:
+        print(str(error))
+        return 1
+    print(result.message)
+    return 0
+
+
+def _rebase_revision(workflow: WorkflowService, revision: str) -> int:
+    try:
+        result = workflow.rebase_onto(revision)
+    except ValueError as error:
+        print(str(error))
+        return 1
+    print(result.message)
+    _print_conflicts(result.conflicts)
+    return 1 if result.conflicts else 0
+
+
+def _print_conflicts(conflicts: tuple[str, ...]) -> None:
+    if not conflicts:
+        return
+    print("conflicts:")
+    for path in conflicts:
+        print(f"  {path}")

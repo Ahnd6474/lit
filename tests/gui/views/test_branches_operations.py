@@ -1,19 +1,15 @@
 from __future__ import annotations
 
-import importlib
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "src"))
-
-from lit.refs import branch_ref
 from lit.repository import Repository
-from tests.test_lit_gui_bootstrap import _clear_lit_gui_modules, _install_fake_pyside6
 
 
-def test_branches_view_handles_non_repository_state(monkeypatch, tmp_path: Path) -> None:
-    app_module, contracts, persistence_module, session_module = _import_gui_modules(monkeypatch)
+def test_branches_view_handles_non_repository_state(gui_modules, tmp_path: Path) -> None:
+    app_module = gui_modules.app
+    contracts = gui_modules.contracts
+    persistence_module = gui_modules.persistence
+    session_module = gui_modules.session
 
     plain_root = tmp_path / "plain"
     plain_root.mkdir()
@@ -32,10 +28,13 @@ def test_branches_view_handles_non_repository_state(monkeypatch, tmp_path: Path)
 
 
 def test_branches_view_creates_branch_restores_dirty_file_and_checks_out_selected_branch(
-    monkeypatch,
+    gui_modules,
     tmp_path: Path,
 ) -> None:
-    app_module, contracts, persistence_module, session_module = _import_gui_modules(monkeypatch)
+    app_module = gui_modules.app
+    contracts = gui_modules.contracts
+    persistence_module = gui_modules.persistence
+    session_module = gui_modules.session
 
     repo_root = tmp_path / "repo"
     repo = Repository.create(repo_root)
@@ -83,10 +82,13 @@ def test_branches_view_creates_branch_restores_dirty_file_and_checks_out_selecte
 
 
 def test_branches_view_reports_target_specific_checkout_block_and_supports_detached_head(
-    monkeypatch,
+    gui_modules,
     tmp_path: Path,
 ) -> None:
-    app_module, contracts, persistence_module, session_module = _import_gui_modules(monkeypatch)
+    app_module = gui_modules.app
+    contracts = gui_modules.contracts
+    persistence_module = gui_modules.persistence
+    session_module = gui_modules.session
 
     repo_root = tmp_path / "repo"
     repo = Repository.create(repo_root)
@@ -137,14 +139,18 @@ def test_branches_view_reports_target_specific_checkout_block_and_supports_detac
 
 
 def test_branches_view_surfaces_merge_conflicts_and_abort_controls(
-    monkeypatch,
+    gui_modules,
     tmp_path: Path,
+    prepare_merge_conflict,
 ) -> None:
-    app_module, contracts, persistence_module, session_module = _import_gui_modules(monkeypatch)
+    app_module = gui_modules.app
+    contracts = gui_modules.contracts
+    persistence_module = gui_modules.persistence
+    session_module = gui_modules.session
 
     repo_root = tmp_path / "repo"
     repo = Repository.create(repo_root)
-    _prepare_merge_conflict(repo, repo_root)
+    prepare_merge_conflict(repo, repo_root)
 
     store = persistence_module.RecentRepositoriesStore(tmp_path / "appdata" / "recent.json")
     session = session_module.LitRepositorySession(repo_root, recent_store=store)
@@ -175,14 +181,18 @@ def test_branches_view_surfaces_merge_conflicts_and_abort_controls(
 
 
 def test_branches_view_surfaces_rebase_conflicts_and_abort_controls(
-    monkeypatch,
+    gui_modules,
     tmp_path: Path,
+    prepare_rebase_conflict,
 ) -> None:
-    app_module, contracts, persistence_module, session_module = _import_gui_modules(monkeypatch)
+    app_module = gui_modules.app
+    contracts = gui_modules.contracts
+    persistence_module = gui_modules.persistence
+    session_module = gui_modules.session
 
     repo_root = tmp_path / "repo"
     repo = Repository.create(repo_root)
-    _prepare_rebase_conflict(repo, repo_root)
+    prepare_rebase_conflict(repo, repo_root)
 
     store = persistence_module.RecentRepositoriesStore(tmp_path / "appdata" / "recent.json")
     session = session_module.LitRepositorySession(repo_root, recent_store=store)
@@ -211,52 +221,3 @@ def test_branches_view_surfaces_rebase_conflicts_and_abort_controls(
     assert window.snapshot.repository.current_branch == "feature"
     assert (repo_root / "story.txt").read_text(encoding="utf-8") == "feature change\n"
     assert "Rebase state cleared." in window.detail_slots.slot_body(contracts.DetailSlotId.GUIDANCE)
-
-
-def _import_gui_modules(monkeypatch):
-    _clear_lit_gui_modules()
-    _install_fake_pyside6(monkeypatch)
-    app_module = importlib.import_module("lit_gui.app")
-    contracts = importlib.import_module("lit_gui.contracts")
-    persistence_module = importlib.import_module("lit_gui.persistence")
-    session_module = importlib.import_module("lit_gui.session")
-    return app_module, contracts, persistence_module, session_module
-
-
-def _prepare_merge_conflict(repository: Repository, root: Path) -> None:
-    story = root / "story.txt"
-    story.write_text("base\n", encoding="utf-8")
-    repository.stage(["story.txt"])
-    base_commit = repository.commit("base")
-    repository.create_branch("feature", start_point=base_commit)
-
-    story.write_text("main change\n", encoding="utf-8")
-    repository.stage(["story.txt"])
-    main_commit = repository.commit("main")
-
-    repository.set_head_ref(branch_ref("feature"))
-    repository.apply_commit(base_commit, baseline_commit=main_commit)
-    story.write_text("feature change\n", encoding="utf-8")
-    repository.stage(["story.txt"])
-    feature_commit = repository.commit("feature")
-
-    repository.set_head_ref(branch_ref("main"))
-    repository.apply_commit(main_commit, baseline_commit=feature_commit)
-
-
-def _prepare_rebase_conflict(repository: Repository, root: Path) -> None:
-    story = root / "story.txt"
-    story.write_text("base\n", encoding="utf-8")
-    repository.stage(["story.txt"])
-    base_commit = repository.commit("base")
-    repository.create_branch("feature", start_point=base_commit)
-
-    story.write_text("main change\n", encoding="utf-8")
-    repository.stage(["story.txt"])
-    main_commit = repository.commit("main")
-
-    repository.set_head_ref(branch_ref("feature"))
-    repository.apply_commit(base_commit, baseline_commit=main_commit)
-    story.write_text("feature change\n", encoding="utf-8")
-    repository.stage(["story.txt"])
-    repository.commit("feature")

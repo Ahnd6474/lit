@@ -1,21 +1,18 @@
 from __future__ import annotations
 
-import importlib
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "src"))
-
 from lit.repository import Repository
-from tests.test_lit_gui_bootstrap import _clear_lit_gui_modules, _install_fake_pyside6
 
 
 def test_changes_view_groups_paths_stages_directory_and_commits_valid_workflow(
-    monkeypatch,
+    gui_modules,
     tmp_path: Path,
 ) -> None:
-    app_module, contracts, persistence_module, session_module = _import_gui_modules(monkeypatch)
+    app_module = gui_modules.app
+    contracts = gui_modules.contracts
+    persistence_module = gui_modules.persistence
+    session_module = gui_modules.session
 
     repo_root = tmp_path / "repo"
     repo = Repository.create(repo_root)
@@ -73,10 +70,13 @@ def test_changes_view_groups_paths_stages_directory_and_commits_valid_workflow(
 
 
 def test_history_view_lists_commit_metadata_changed_files_and_file_diff(
-    monkeypatch,
+    gui_modules,
     tmp_path: Path,
 ) -> None:
-    app_module, contracts, persistence_module, session_module = _import_gui_modules(monkeypatch)
+    app_module = gui_modules.app
+    contracts = gui_modules.contracts
+    persistence_module = gui_modules.persistence
+    session_module = gui_modules.session
 
     repo_root = tmp_path / "repo"
     repo = Repository.create(repo_root)
@@ -102,11 +102,7 @@ def test_history_view_lists_commit_metadata_changed_files_and_file_diff(
     assert window.snapshot.history.selected_commit == second_commit
     assert "3 path(s)" in history_view.commit_buttons[0].text()
 
-    visible_changed_files = [
-        button.text()
-        for button in history_view.changed_file_buttons
-        if button.isVisible()
-    ]
+    visible_changed_files = [button.text() for button in history_view.changed_file_buttons if button.isVisible()]
     assert visible_changed_files == ["extra.txt", "notes.txt", "story.txt"]
 
     _click_button(history_view.changed_file_buttons, "story.txt")
@@ -127,13 +123,3 @@ def _click_button(buttons, text_fragment: str) -> None:
             button.clicked.emit()
             return
     raise AssertionError(f"button not found: {text_fragment}")
-
-
-def _import_gui_modules(monkeypatch):
-    _clear_lit_gui_modules()
-    _install_fake_pyside6(monkeypatch)
-    app_module = importlib.import_module("lit_gui.app")
-    contracts = importlib.import_module("lit_gui.contracts")
-    persistence_module = importlib.import_module("lit_gui.persistence")
-    session_module = importlib.import_module("lit_gui.session")
-    return app_module, contracts, persistence_module, session_module

@@ -1,14 +1,8 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "src"))
-
-from lit.refs import branch_ref
 from lit.repository import Repository
-from lit.storage import read_json, write_json
 from lit_gui.contracts import NavigationTarget
 from lit_gui.session import LitRepositorySession
 
@@ -31,11 +25,14 @@ def test_initialize_repository_returns_unborn_snapshot(tmp_path: Path) -> None:
     assert "Initialized empty lit repository" in snapshot.home.detail.guidance.body
 
 
-def test_open_repository_normalizes_clean_history_branches_and_files(tmp_path: Path) -> None:
+def test_open_repository_normalizes_clean_history_branches_and_files(
+    tmp_path: Path,
+    commit_all,
+) -> None:
     repo = Repository.create(tmp_path)
     story = tmp_path / "story.txt"
     story.write_text("base\n", encoding="utf-8")
-    head_commit = _commit_all(repo, "base commit")
+    head_commit = commit_all(repo, "base commit")
 
     session = LitRepositorySession(tmp_path)
     snapshot = session.open_repository(tmp_path)
@@ -66,11 +63,14 @@ def test_open_repository_normalizes_clean_history_branches_and_files(tmp_path: P
     assert "switched to branch feature" in snapshot.branches.detail.guidance.body
 
 
-def test_session_refreshes_dirty_state_and_preserves_selection_across_mutations(tmp_path: Path) -> None:
+def test_session_refreshes_dirty_state_and_preserves_selection_across_mutations(
+    tmp_path: Path,
+    commit_all,
+) -> None:
     repo = Repository.create(tmp_path)
     story = tmp_path / "story.txt"
     story.write_text("base\n", encoding="utf-8")
-    _commit_all(repo, "base")
+    commit_all(repo, "base")
 
     session = LitRepositorySession(tmp_path)
     session.open_repository(tmp_path)
@@ -119,9 +119,12 @@ def test_session_refreshes_dirty_state_and_preserves_selection_across_mutations(
     assert "restored 1 path(s) from HEAD" in snapshot.changes.detail.guidance.body
 
 
-def test_merge_conflict_snapshot_reports_operation_and_supports_abort(tmp_path: Path) -> None:
+def test_merge_conflict_snapshot_reports_operation_and_supports_abort(
+    tmp_path: Path,
+    prepare_merge_conflict,
+) -> None:
     repo = Repository.create(tmp_path)
-    _prepare_merge_conflict(repo, tmp_path)
+    prepare_merge_conflict(repo, tmp_path)
 
     session = LitRepositorySession(tmp_path)
     session.open_repository(tmp_path)
@@ -144,9 +147,12 @@ def test_merge_conflict_snapshot_reports_operation_and_supports_abort(tmp_path: 
     assert "Merge state cleared." in snapshot.changes.detail.guidance.body
 
 
-def test_merge_action_resumes_conflicted_merge_through_backend_boundary(tmp_path: Path) -> None:
+def test_merge_action_resumes_conflicted_merge_through_backend_boundary(
+    tmp_path: Path,
+    prepare_merge_conflict,
+) -> None:
     repo = Repository.create(tmp_path)
-    _prepare_merge_conflict(repo, tmp_path)
+    prepare_merge_conflict(repo, tmp_path)
 
     session = LitRepositorySession(tmp_path)
     session.open_repository(tmp_path)
@@ -165,9 +171,12 @@ def test_merge_action_resumes_conflicted_merge_through_backend_boundary(tmp_path
     assert "Merge commit created" in snapshot.changes.detail.guidance.body
 
 
-def test_rebase_conflict_snapshot_reports_operation_and_supports_abort(tmp_path: Path) -> None:
+def test_rebase_conflict_snapshot_reports_operation_and_supports_abort(
+    tmp_path: Path,
+    prepare_rebase_conflict,
+) -> None:
     repo = Repository.create(tmp_path)
-    _prepare_rebase_conflict(repo, tmp_path)
+    prepare_rebase_conflict(repo, tmp_path)
 
     session = LitRepositorySession(tmp_path)
     session.open_repository(tmp_path)
@@ -191,9 +200,12 @@ def test_rebase_conflict_snapshot_reports_operation_and_supports_abort(tmp_path:
     assert "Rebase state cleared." in snapshot.changes.detail.guidance.body
 
 
-def test_rebase_action_resumes_conflicted_rebase_through_backend_boundary(tmp_path: Path) -> None:
+def test_rebase_action_resumes_conflicted_rebase_through_backend_boundary(
+    tmp_path: Path,
+    prepare_rebase_conflict,
+) -> None:
     repo = Repository.create(tmp_path)
-    _prepare_rebase_conflict(repo, tmp_path)
+    prepare_rebase_conflict(repo, tmp_path)
 
     session = LitRepositorySession(tmp_path)
     session.open_repository(tmp_path)
@@ -214,20 +226,14 @@ def test_rebase_action_resumes_conflicted_rebase_through_backend_boundary(tmp_pa
 
 def test_session_release_surface_methods_refresh_checkpoint_verification_and_lineage_state(
     tmp_path: Path,
+    commit_all,
+    write_smoke_verification_command,
 ) -> None:
     repo = Repository.create(tmp_path)
     story = tmp_path / "story.txt"
     story.write_text("base\n", encoding="utf-8")
-    head_commit = _commit_all(repo, "base")
-    config = read_json(repo.layout.config, default={}) or {}
-    config["verification_commands"] = [
-        {
-            "name": "smoke",
-            "command": [sys.executable, "-c", "print('ok')"],
-            "command_identity": "session-smoke",
-        }
-    ]
-    write_json(repo.layout.config, config)
+    head_commit = commit_all(repo, "base")
+    write_smoke_verification_command(repo, command_identity="session-smoke")
 
     session = LitRepositorySession(tmp_path)
     session.open_repository(tmp_path)
@@ -251,41 +257,3 @@ def test_session_release_surface_methods_refresh_checkpoint_verification_and_lin
     snapshot = session.rollback_to_checkpoint(snapshot.repository.latest_safe_checkpoint_id)
     assert snapshot.history.selected_commit == head_commit
     assert "rolled back" in snapshot.history.detail.guidance.body.lower()
-
-
-def _commit_all(repository: Repository, message: str) -> str:
-    repository.stage(["."])
-    return repository.commit(message)
-
-
-def _prepare_merge_conflict(repository: Repository, root: Path) -> None:
-    story = root / "story.txt"
-    story.write_text("base\n", encoding="utf-8")
-    base_commit = _commit_all(repository, "base")
-    repository.create_branch("feature", start_point=base_commit)
-
-    story.write_text("main change\n", encoding="utf-8")
-    main_commit = _commit_all(repository, "main")
-
-    repository.set_head_ref(branch_ref("feature"))
-    repository.apply_commit(base_commit, baseline_commit=main_commit)
-    story.write_text("feature change\n", encoding="utf-8")
-    feature_commit = _commit_all(repository, "feature")
-
-    repository.set_head_ref(branch_ref("main"))
-    repository.apply_commit(main_commit, baseline_commit=feature_commit)
-
-
-def _prepare_rebase_conflict(repository: Repository, root: Path) -> None:
-    story = root / "story.txt"
-    story.write_text("base\n", encoding="utf-8")
-    base_commit = _commit_all(repository, "base")
-    repository.create_branch("feature", start_point=base_commit)
-
-    story.write_text("main change\n", encoding="utf-8")
-    main_commit = _commit_all(repository, "main")
-
-    repository.set_head_ref(branch_ref("feature"))
-    repository.apply_commit(base_commit, baseline_commit=main_commit)
-    story.write_text("feature change\n", encoding="utf-8")
-    _commit_all(repository, "feature")

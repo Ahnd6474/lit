@@ -1,21 +1,18 @@
 from __future__ import annotations
 
-import importlib
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "src"))
-
 from lit.repository import Repository
-from tests.test_lit_gui_bootstrap import _clear_lit_gui_modules, _install_fake_pyside6
 
 
 def test_home_view_handles_missing_and_non_repository_folders_and_persists_recents(
-    monkeypatch,
+    gui_modules,
     tmp_path: Path,
 ) -> None:
-    app_module, contracts, persistence_module, session_module = _import_gui_modules(monkeypatch)
+    app_module = gui_modules.app
+    contracts = gui_modules.contracts
+    persistence_module = gui_modules.persistence
+    session_module = gui_modules.session
 
     launch_root = tmp_path / "launch"
     launch_root.mkdir()
@@ -73,10 +70,13 @@ def test_home_view_handles_missing_and_non_repository_folders_and_persists_recen
 
 
 def test_files_view_browses_repository_tree_and_previews_selected_nodes(
-    monkeypatch,
+    gui_modules,
     tmp_path: Path,
 ) -> None:
-    app_module, contracts, persistence_module, session_module = _import_gui_modules(monkeypatch)
+    app_module = gui_modules.app
+    contracts = gui_modules.contracts
+    persistence_module = gui_modules.persistence
+    session_module = gui_modules.session
 
     repo_root = tmp_path / "repo"
     repo = Repository.create(repo_root)
@@ -122,13 +122,3 @@ def _click_button(buttons, text_fragment: str) -> None:
             button.clicked.emit()
             return
     raise AssertionError(f"button not found: {text_fragment}")
-
-
-def _import_gui_modules(monkeypatch):
-    _clear_lit_gui_modules()
-    _install_fake_pyside6(monkeypatch)
-    app_module = importlib.import_module("lit_gui.app")
-    contracts = importlib.import_module("lit_gui.contracts")
-    persistence_module = importlib.import_module("lit_gui.persistence")
-    session_module = importlib.import_module("lit_gui.session")
-    return app_module, contracts, persistence_module, session_module

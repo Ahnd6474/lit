@@ -1,24 +1,21 @@
 from __future__ import annotations
 
-import importlib
-import sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "src"))
 
 from lit.artifact_store import ArtifactStore
 from lit.artifacts import ArtifactLink
 from lit.repository import Repository
-from lit.storage import read_json, write_json
-from tests.test_lit_gui_bootstrap import _clear_lit_gui_modules, _install_fake_pyside6
 
 
 def test_release_surface_views_render_checkpoints_verification_lineages_and_health(
-    monkeypatch,
+    gui_modules,
     tmp_path: Path,
+    write_smoke_verification_command,
 ) -> None:
-    app_module, contracts, persistence_module, session_module = _import_gui_modules(monkeypatch)
+    app_module = gui_modules.app
+    contracts = gui_modules.contracts
+    persistence_module = gui_modules.persistence
+    session_module = gui_modules.session
 
     repo_root = tmp_path / "repo"
     repo = Repository.create(repo_root)
@@ -27,7 +24,7 @@ def test_release_surface_views_render_checkpoints_verification_lineages_and_heal
     repo.stage(["story.txt"])
     head_revision = repo.commit("seed")
     checkpoint = repo.create_checkpoint(revision_id=head_revision, name="safe-seed")
-    _write_verification_commands(repo)
+    write_smoke_verification_command(repo, command_identity="gui-smoke")
     repo.run_verification(
         owner_kind="revision",
         owner_id=head_revision,
@@ -80,25 +77,3 @@ def _click_button(buttons, text_fragment: str) -> None:
             button.clicked.emit()
             return
     raise AssertionError(f"button not found: {text_fragment}")
-
-
-def _write_verification_commands(repo: Repository) -> None:
-    config = read_json(repo.layout.config, default={}) or {}
-    config["verification_commands"] = [
-        {
-            "name": "smoke",
-            "command": [sys.executable, "-c", "print('ok')"],
-            "command_identity": "gui-smoke",
-        }
-    ]
-    write_json(repo.layout.config, config)
-
-
-def _import_gui_modules(monkeypatch):
-    _clear_lit_gui_modules()
-    _install_fake_pyside6(monkeypatch)
-    app_module = importlib.import_module("lit_gui.app")
-    contracts = importlib.import_module("lit_gui.contracts")
-    persistence_module = importlib.import_module("lit_gui.persistence")
-    session_module = importlib.import_module("lit_gui.session")
-    return app_module, contracts, persistence_module, session_module

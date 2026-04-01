@@ -2,148 +2,9 @@ from __future__ import annotations
 
 import importlib
 import sys
-import tomllib
 import types
-from dataclasses import FrozenInstanceError
-from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
-
-
-def test_pyproject_declares_lit_gui_entrypoint_and_optional_pyside6_extra() -> None:
-    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-
-    assert project["scripts"]["lit-gui"] == "lit_gui.app:main"
-    assert project["optional-dependencies"]["gui"] == ["PySide6>=6.8"]
-    assert project["dependencies"] == []
-
-
-def test_gui_contracts_are_immutable_and_route_all_views() -> None:
-    contracts = importlib.import_module("lit_gui.contracts")
-
-    repository = contracts.RepositoryDescriptor(
-        name="workspace",
-        root=Path("C:/workspace"),
-        is_lit_repository=False,
-    )
-    detail = contracts.DetailPaneState.placeholder(
-        selection_title="Selection",
-        selection_body="Placeholder selection",
-        metadata_title="Metadata",
-        metadata_body="Placeholder metadata",
-        guidance_title="Guidance",
-        guidance_body="Placeholder guidance",
-    )
-    home = contracts.HomeViewState(
-        route=contracts.NavigationTarget.HOME,
-        title="Home",
-        subtitle="home",
-        detail=detail,
-        context=repository,
-    )
-    changes = contracts.ChangesViewState(
-        route=contracts.NavigationTarget.CHANGES,
-        title="Changes",
-        subtitle="changes",
-        detail=detail,
-        context=repository,
-    )
-    history = contracts.HistoryViewState(
-        route=contracts.NavigationTarget.HISTORY,
-        title="History",
-        subtitle="history",
-        detail=detail,
-        context=repository,
-    )
-    branches = contracts.BranchesViewState(
-        route=contracts.NavigationTarget.BRANCHES,
-        title="Branches",
-        subtitle="branches",
-        detail=detail,
-        context=repository,
-    )
-    files = contracts.FilesViewState(
-        route=contracts.NavigationTarget.FILES,
-        title="Files",
-        subtitle="files",
-        detail=detail,
-        context=repository,
-    )
-
-    snapshot = contracts.SessionSnapshot(
-        repository=repository,
-        home=home,
-        changes=changes,
-        history=history,
-        branches=branches,
-        files=files,
-    )
-
-    assert snapshot.default_view == contracts.NavigationTarget.HOME
-    assert snapshot.for_view(contracts.NavigationTarget.HISTORY) is history
-    assert detail.slots() == (detail.selection, detail.metadata, detail.guidance)
-
-    with pytest.raises(FrozenInstanceError):
-        repository.name = "changed"
-
-    with pytest.raises(TypeError):
-        contracts.RepositorySession()
-
-
-def test_shell_builds_three_pane_placeholder_navigation(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    app_module, contracts = _import_gui_modules(monkeypatch)
-    monkeypatch.chdir(tmp_path)
-
-    window = app_module.build_window()
-
-    assert window.windowTitle() == "lit"
-    assert window.splitter.count() == 3
-    assert window.available_views == contracts.VIEW_ORDER
-    assert window.active_view == contracts.NavigationTarget.HOME
-    assert window.center_stack.currentWidget().route == contracts.NavigationTarget.HOME
-
-    window.show_view(contracts.NavigationTarget.BRANCHES)
-
-    assert window.active_view == contracts.NavigationTarget.BRANCHES
-    assert window.center_stack.currentWidget().route == contracts.NavigationTarget.BRANCHES
-    assert window.sidebar.is_active(contracts.NavigationTarget.BRANCHES) is True
-
-
-def test_shell_updates_shared_detail_slots_when_view_changes(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    app_module, contracts = _import_gui_modules(monkeypatch)
-    monkeypatch.chdir(tmp_path)
-
-    window = app_module.build_window()
-
-    assert window.detail_slots.slot_ids == (
-        contracts.DetailSlotId.SELECTION,
-        contracts.DetailSlotId.METADATA,
-        contracts.DetailSlotId.GUIDANCE,
-    )
-    assert window.detail_slots.slot_title(contracts.DetailSlotId.SELECTION) == "Selected repository"
-    assert "initialize this folder" in window.detail_slots.slot_body(contracts.DetailSlotId.GUIDANCE).lower()
-
-    window.show_view(contracts.NavigationTarget.HISTORY)
-
-    assert window.detail_slots.slot_title(contracts.DetailSlotId.SELECTION) == "Selected commit"
-    assert "commit history appears here" in window.detail_slots.slot_body(contracts.DetailSlotId.METADATA).lower()
-
-
-def _import_gui_modules(monkeypatch: pytest.MonkeyPatch):
-    _clear_lit_gui_modules()
-    _install_fake_pyside6(monkeypatch)
-    app_module = importlib.import_module("lit_gui.app")
-    contracts = importlib.import_module("lit_gui.contracts")
-    return app_module, contracts
 
 
 def _clear_lit_gui_modules() -> None:
@@ -399,3 +260,15 @@ def _install_fake_pyside6(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "PySide6", pyside6)
     monkeypatch.setitem(sys.modules, "PySide6.QtCore", qtcore)
     monkeypatch.setitem(sys.modules, "PySide6.QtWidgets", qtwidgets)
+
+
+@pytest.fixture
+def gui_modules(monkeypatch: pytest.MonkeyPatch):
+    _clear_lit_gui_modules()
+    _install_fake_pyside6(monkeypatch)
+    return types.SimpleNamespace(
+        app=importlib.import_module("lit_gui.app"),
+        contracts=importlib.import_module("lit_gui.contracts"),
+        persistence=importlib.import_module("lit_gui.persistence"),
+        session=importlib.import_module("lit_gui.session"),
+    )

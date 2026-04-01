@@ -1,163 +1,193 @@
 # lit
 
-`lit` is a local execution VCS for autonomous coding workflows on one machine. It is local-only and offline-first, but it is not a local Git clone.
+`lit` means "local git". It is a lightweight, local-only, offline-only version control prototype for one computer.
 
-The v1 product is aimed at long-running local agent work and the future Jakal Flow repository backend. Its core surfaces are safe checkpoints, complete rollback, structured provenance, verification-aware history, lineage isolation, local artifact management, an installable CLI, and a desktop UI.
+The project aims to feel familiar if you already know Git, but it intentionally removes anything that depends on remotes, accounts, servers, syncing, or network access. Everything lives in a local `.lit/` directory inside your project.
 
-## What lit Does
+`lit init` is the only implemented end-to-end command today.
 
-- Initializes a repository inside any local folder with `lit init`.
-- Stages files and directories with `lit add`.
-- Creates local revisions with `lit commit -m`.
-- Creates safe checkpoints with `lit checkpoint create`.
-- Rolls back to the latest safe checkpoint or a selected checkpoint with `lit rollback`.
-- Records or replays verification with `lit verify`.
-- Isolates parallel local work with `lit lineage`.
-- Tracks local artifact manifests, usage, and garbage collection with `lit artifact` and `lit gc`.
-- Inspects repository health with `lit doctor`.
-- Builds a Git-facing export plan with `lit export`.
-- Still supports familiar local `lit branch`, `lit checkout`, `lit merge`, and `lit rebase` workflows.
+## Why lit exists
 
-## Local-Only Design
+Use `lit` if you want simple local checkpoints without turning on a hosted workflow.
 
-`lit` is intentionally local-only and offline-only.
+- Keep history on one machine.
+- Work fully offline.
+- Use Git-like ideas for staging, commits, branches, merges, and rebases.
+- Keep the storage format deterministic and easy to inspect.
 
-- No remote repositories
-- No `push`, `pull`, `fetch`, or `clone`
-- No accounts, login, sync, or cloud service
-- No team collaboration workflow
-- No background daemon or server
+## Current status
 
-If you need multi-machine sync or shared collaboration, use Git instead.
+This repository is in the bootstrap stage.
 
-## Installation
+| Command | Status | Notes |
+| --- | --- | --- |
+| `lit init` | Implemented | Creates a deterministic `.lit/` repository. |
+| `lit add` | Reserved | Prints a not-implemented message and exits with code `2`. |
+| `lit commit` | Reserved | Prints a not-implemented message and exits with code `2`. |
+| `lit log` | Reserved | Prints a not-implemented message and exits with code `2`. |
+| `lit status` | Reserved | Prints a not-implemented message and exits with code `2`. |
+| `lit diff` | Reserved | Prints a not-implemented message and exits with code `2`. |
+| `lit restore` | Reserved | Prints a not-implemented message and exits with code `2`. |
+| `lit checkout` | Reserved | Prints a not-implemented message and exits with code `2`. |
+| `lit branch` | Reserved | Prints a not-implemented message and exits with code `2`. |
+| `lit merge` | Reserved | Prints a not-implemented message and exits with code `2`. |
+| `lit rebase` | Reserved | Prints a not-implemented message and exits with code `2`. |
 
-`lit` targets Python 3.12+.
+## Install and run locally
 
-Base CLI install:
+`lit` currently targets Python 3.12 or newer.
 
 ```bash
-python -m pip install -e .
+git clone https://github.com/Ahnd6474/lit.git
+cd lit
+python -m venv .venv
+. .venv/bin/activate
+pip install -e .
 ```
 
-If the `lit` script directory is not on your `PATH`, use `python -m lit ...` instead of `lit ...`.
+On Windows PowerShell, activate the environment with:
 
-Optional desktop GUI install:
-
-```bash
-python -m pip install -e .[gui]
+```powershell
+.venv\Scripts\Activate.ps1
 ```
 
-That installs the `lit` console command. The GUI entrypoint is `lit-gui` when the optional GUI dependency is installed.
-
-## Quick Start
+Then initialize a repository:
 
 ```bash
-mkdir demo
-cd demo
+python -m lit init
+```
+
+Or install the console script and use:
+
+```bash
 lit init
-python -c "from pathlib import Path; Path('note.txt').write_text('hello\\n', encoding='utf-8')"
-lit add note.txt
-lit commit -m "Create first checkpoint"
-lit checkpoint create --name safe-start
-lit status
+```
+
+To initialize a different folder or choose another default branch:
+
+```bash
+python -m lit init my-project
+python -m lit init --branch trunk my-project
+```
+
+## What `lit init` creates
+
+The current bootstrap layout is:
+
+```text
+.lit/
+  HEAD
+  config.json
+  index.json
+  objects/
+    blobs/
+    commits/
+    trees/
+  refs/
+    heads/
+    tags/
+  state/
+    merge.json
+    rebase.json
+```
+
+Notes:
+
+- `HEAD` points at the current branch reference, such as `refs/heads/main`.
+- `config.json` stores deterministic repository settings.
+- `index.json` is the future staging area file.
+- `objects/` is reserved for content-addressed blobs, trees, and commits.
+- `state/merge.json` and `state/rebase.json` are reserved for in-progress operations.
+
+## Beginner quick start
+
+What you can run today:
+
+```bash
+mkdir notes
+cd notes
+python -m lit init
+```
+
+Expected result:
+
+- A `.lit/` directory appears in the current folder.
+- The default branch is `main` unless you override it.
+- Running `python -m lit init` again reinitializes the same repository safely.
+
+If you try a planned command now, you will see the current limitation clearly:
+
+```bash
+python -m lit add README.md
+```
+
+That command is reserved, but it is not implemented yet.
+
+## Planned command workflow
+
+The intended local workflow is Git-like, but most of it is still ahead of this bootstrap milestone.
+
+```text
+lit init
+lit add <files>
+lit commit -m "message"
+lit branch feature-x
+lit checkout feature-x
+lit merge feature-x
+lit rebase main
+lit restore <path>
 lit log
-lit doctor
+lit status
+lit diff
 ```
 
-## Release Surface
+Treat that sequence as the product direction, not as a promise that the commands already work in this revision.
 
-### CLI
-
-```bash
-lit checkpoint list
-lit rollback
-lit verify status
-lit lineage list
-lit artifact usage
-lit gc --dry-run
-lit export --json
-```
-
-Most inspection workflows support `--json` for machine-readable output.
-
-### Desktop GUI
-
-After `python -m pip install -e .[gui]`, launch the desktop app with either command:
-
-```bash
-lit-gui
-# or
-python -m lit_gui.app
-```
-
-If `PySide6` is not installed, the desktop entrypoint will fail until the optional `gui` extra is installed.
-
-The desktop shell uses the same backend records as the CLI and exposes:
-
-- checkpoint timeline and rollback anchors
-- commit provenance and verification state
-- lineage state and promotion preview
-- conflict review for merge and rebase
-- artifact usage and repository health
-
-## Git Bridge, Not Git Parity
-
-`lit` keeps some Git-like commands for familiarity, but Git parity is not the goal.
+## Git similarities and differences
 
 Similar to Git:
 
-- snapshot-based local commits
-- an index/staging area before commit
-- local branch, merge, checkout, and rebase workflows
-- detached `HEAD` when checking out a commit directly
+- Repository-per-folder model.
+- A hidden metadata directory.
+- Planned staging, commits, branches, merges, rebases, diffs, and restore flows.
+- Content-addressed objects and branch references.
 
 Different from Git:
 
-- `lit` centers safe checkpoints, rollback, provenance, verification, and lineage isolation
-- `lit export` produces a Git-facing plan; it does not turn `lit` into Git
-- there are no remotes and no `push`, `pull`, `fetch`, or `clone`
-- conflict handling is intentionally local and explicit
+- `lit` is local-only by design.
+- `lit` is offline-only by design.
+- There is no clone, fetch, pull, push, remote, account, or collaboration model.
+- The scope is intentionally smaller and easier to understand.
 
-## Jakal Flow Path
+## Local-only and offline-only design
 
-`lit` is intended to be a credible future backend for Jakal Flow:
+These are product rules, not temporary omissions.
 
-- planner and executor runs can record lineage, block, step, and run provenance
-- verification results are attached to revision and checkpoint boundaries
-- lineages provide isolated parallel worker lanes with promotion review
-- safe checkpoints provide the canonical last-known-good rollback target
+- No network access is required to use `lit`.
+- No server process is required.
+- No remote repository concept is planned.
+- No sync service, cloud storage, login, or hosted control plane is part of the design.
 
-## Verification
+## Website
 
-Run the repository test suite locally with:
+A simple local docs site lives in `website/`.
 
-```bash
-python -m pytest
-```
+- Open `website/index.html` directly in a browser.
+- Or serve it locally with `python -m http.server` and visit the generated local URL.
+- The site is plain static HTML and CSS with no build step.
 
-You can also configure repository verification commands and record them with `lit verify run`.
+## Limitations and non-goals
 
-The closeout pass verified:
+Current limitations:
 
-- `python -m pytest`
-- `python -m pip install -e .`
-- `python -m lit --help`
+- Only repository initialization is implemented.
+- There is no working staging, commit history, diff output, restore flow, branch switching, merge logic, or rebase engine yet.
+- The documentation shows both the verified current state and the intended future workflow. Do not assume reserved commands work until tests and code land for them.
 
-## Current Limitations
+Non-goals:
 
-- `lit export` is a Git interoperability bridge, not a full Git transport or object-compatibility layer.
-- Conflict handling is manual: `lit` writes markers and preserves state, but it does not provide an interactive resolver.
-- The desktop UI exposes verified repository state, but it still favors a narrow local workflow over a full IDE.
-- On-disk formats are versioned and backward compatible with legacy commit metadata, but v1 remains intentionally scoped to one-machine execution workflows.
-
-## Non-Goals
-
-- Remote hosting
-- `push`, `pull`, `fetch`, or `clone`
-- Authentication, user accounts, or permissions
-- Multi-user collaboration
-- Cloud backup or sync
-- Full Git compatibility
-
-To open the static local website, open `website/index.html` in a browser.
+- Remote repositories.
+- Multi-user collaboration.
+- Cloud sync.
+- Accounts, logins, or hosted infrastructure.
+- Heavy web stacks or documentation tooling for the local docs site.

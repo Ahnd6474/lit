@@ -1,174 +1,190 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>lit | local execution vcs</title>
-    <link rel="stylesheet" href="styles.css">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lit docs</title>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="page">
-      <section class="hero">
-        <p class="eyebrow">local execution vcs</p>
-        <h1>lit is a local execution VCS for autonomous coding workflows on one machine.</h1>
-        <p class="lead">
-          Use it for safe checkpoints, rollback, provenance, verification-aware history,
-          lineage isolation, and local artifacts. No account, no server, no sync,
-          no remote, and no network requirement.
-        </p>
-        <div class="hero-actions">
-          <a href="#quick-start">Quick Start</a>
-          <a href="#limitations" class="secondary">Limitations</a>
-        </div>
-      </section>
+    <header class="hero">
+      <p class="eyebrow">lit documentation</p>
+      <h1>Local history, no network required.</h1>
+      <p class="lede">
+        lit is a local-only, offline-only version control prototype. It borrows the
+        basic shape of Git for one-computer workflows, without remotes, accounts,
+        servers, or cloud features.
+      </p>
+      <div class="callout">
+        <strong>Open this file directly in your browser.</strong>
+        <span>You can also serve the <code>website/</code> folder with a tiny local static server.</span>
+      </div>
+    </header>
 
-      <section class="panel">
-        <h2>Why use lit?</h2>
+    <main>
+      <nav class="toc" aria-label="Contents">
+        <a href="#what">What is lit?</a>
+        <a href="#setup">Install and setup</a>
+        <a href="#commands">Command overview</a>
+        <a href="#workflow">Planned command workflow</a>
+        <a href="#git">Git: same ideas, smaller scope</a>
+        <a href="#limits">Limitations and non-goals</a>
+      </nav>
+
+      <section id="what" class="panel">
+        <h2>What is lit?</h2>
         <p>
-          `lit` keeps a few familiar Git-like verbs for local work, but the product centers
-          safe checkpoints, rollback, provenance, verification, and lineage isolation for
-          long-running autonomous workflows on one machine.
+          lit means "local git". The goal is simple: keep local checkpoints on one
+          machine with a workflow that feels familiar to Git users while staying much
+          smaller in scope.
         </p>
         <ul>
-          <li>Local-only and offline-only by design</li>
-          <li>Safe checkpoints and rollback anchors</li>
-          <li>Structured provenance and verification status</li>
-          <li>Lineage isolation for parallel local workers</li>
-          <li>CLI and optional desktop GUI on one shared backend</li>
-          <li>No `push`, `pull`, `fetch`, `clone`, or hosted service</li>
-          <li>No account, login, cloud, daemon, or background sync</li>
+          <li>local-only</li>
+          <li>offline-only</li>
+          <li>single-computer workflow</li>
+          <li>deterministic on-disk storage</li>
         </ul>
       </section>
 
-      <section class="grid">
-        <article class="panel">
-          <h2>Installation</h2>
-          <p>`lit` targets Python 3.12+.</p>
-          <pre><code>python -m pip install -e .</code></pre>
-          <p>
-            That installs the `lit` command from this repository. If the script directory
-            is not on your <code>PATH</code>, use <code>python -m lit ...</code>.
-          </p>
-        </article>
-
-        <article class="panel" id="quick-start">
-          <h2>Quick start</h2>
-          <pre><code>mkdir demo
-cd demo
-lit init
-python -c "from pathlib import Path; Path('note.txt').write_text('hello\n', encoding='utf-8')"
-lit add note.txt
-lit commit -m "Create first checkpoint"
-lit checkpoint create --name safe-start
-lit status
-lit log
-lit doctor</code></pre>
-        </article>
+      <section id="setup" class="panel">
+        <h2>Install and setup</h2>
+        <p>lit currently targets Python 3.12 or newer.</p>
+        <pre><code>git clone https://github.com/Ahnd6474/lit.git
+cd lit
+python -m venv .venv
+pip install -e .
+python -m lit init</code></pre>
+        <p>
+          If you prefer a local static server for these docs, run
+          <code>python -m http.server</code> inside <code>website/</code> and open the
+          local address it prints.
+        </p>
       </section>
 
-      <section class="panel">
+      <section id="commands" class="panel">
         <h2>Command overview</h2>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Command</th>
-                <th>What it does</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td><code>lit init [path]</code></td><td>Create a new <code>.lit</code> repository.</td></tr>
-              <tr><td><code>lit add &lt;paths...&gt;</code></td><td>Stage files or directories.</td></tr>
-              <tr><td><code>lit commit -m "message"</code></td><td>Create a commit from the index.</td></tr>
-              <tr><td><code>lit status</code></td><td>Show staged, modified, deleted, and untracked files.</td></tr>
-              <tr><td><code>lit diff</code></td><td>Show the working tree diff against the current commit.</td></tr>
-              <tr><td><code>lit log</code></td><td>Show first-parent history from <code>HEAD</code>.</td></tr>
-              <tr><td><code>lit restore [paths...] --source &lt;rev&gt;</code></td><td>Restore tracked files without moving <code>HEAD</code>.</td></tr>
-              <tr><td><code>lit checkout &lt;branch-or-commit&gt;</code></td><td>Switch branches or detach <code>HEAD</code>.</td></tr>
-              <tr><td><code>lit branch [name]</code></td><td>List branches or create a new branch.</td></tr>
-              <tr><td><code>lit merge &lt;rev&gt;</code></td><td>Merge another local revision into the current branch.</td></tr>
-              <tr><td><code>lit merge --abort</code></td><td>Clear merge state and restore the pre-merge tree.</td></tr>
-              <tr><td><code>lit rebase &lt;rev&gt;</code></td><td>Rebase the current branch onto another local revision.</td></tr>
-              <tr><td><code>lit rebase --abort</code></td><td>Clear rebase state and restore the original branch tip.</td></tr>
-              <tr><td><code>lit checkpoint ...</code></td><td>Create, list, inspect, and pin safe checkpoints.</td></tr>
-              <tr><td><code>lit rollback ...</code></td><td>Restore the latest safe checkpoint or a selected checkpoint.</td></tr>
-              <tr><td><code>lit verify ...</code></td><td>Run or replay verification and inspect cached status.</td></tr>
-              <tr><td><code>lit lineage ...</code></td><td>Create, inspect, switch, preview, promote, or discard lineages.</td></tr>
-              <tr><td><code>lit artifact ...</code></td><td>Inspect artifacts, linkage, and storage usage.</td></tr>
-              <tr><td><code>lit doctor</code></td><td>Inspect health, locks, and unfinished transactions.</td></tr>
-              <tr><td><code>lit export</code></td><td>Build a Git-facing export plan with provenance mapping.</td></tr>
-            </tbody>
-          </table>
+        <p>Only <code>lit init</code> works today.</p>
+        <p>Only `lit init` works today.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Command</th>
+              <th>Status</th>
+              <th>Current behavior</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>lit init</code></td>
+              <td>Implemented</td>
+              <td>Creates a deterministic <code>.lit/</code> layout.</td>
+            </tr>
+            <tr>
+              <td><code>lit add</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit commit</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit log</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit status</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit diff</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit restore</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit checkout</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit branch</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit merge</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+            <tr>
+              <td><code>lit rebase</code></td>
+              <td>Reserved</td>
+              <td>Placeholder command, not implemented yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="workflow" class="panel">
+        <h2>Planned command workflow</h2>
+        <p>
+          This is the beginner-friendly path lit is being built toward. In this revision,
+          it is a roadmap, not a fully working demo.
+        </p>
+        <pre><code>lit init
+lit add notes.txt
+lit commit -m "save first draft"
+lit branch experiment
+lit checkout experiment
+lit merge experiment
+lit rebase main
+lit restore notes.txt</code></pre>
+        <p>
+          Today, only the first line is executable. The rest describe the intended
+          Git-like workflow for future milestones.
+        </p>
+      </section>
+
+      <section id="git" class="panel">
+        <h2>Git: same ideas, smaller scope</h2>
+        <div class="split">
+          <div>
+            <h3>Similar</h3>
+            <ul>
+              <li>repository per folder</li>
+              <li>hidden metadata directory</li>
+              <li>planned staging, commit, branch, merge, and rebase flow</li>
+              <li>content-addressed objects</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Different</h3>
+            <ul>
+              <li>no push, pull, fetch, clone, or remotes</li>
+              <li>no accounts or hosted service</li>
+              <li>no collaboration model</li>
+              <li>designed to stay local-only and offline-only</li>
+            </ul>
+          </div>
         </div>
       </section>
 
-      <section class="grid">
-        <article class="panel">
-          <h2>Example workflow</h2>
-          <pre><code>lit init
-lit add src
-lit commit -m "Save working version"
-lit checkpoint create --name safe-base
-lit lineage create worker-a --owned-path src/lit
-lit lineage switch worker-a
-lit verify status
-lit lineage switch main
-lit lineage promote worker-a --preview
-lit rollback</code></pre>
-        </article>
-
-        <article class="panel">
-          <h2>Git similarities and differences</h2>
-          <p>Similar to Git:</p>
-          <ul>
-            <li>Staging before commit</li>
-            <li>Local history and branches</li>
-            <li>Merge, rebase, checkout, and detached <code>HEAD</code></li>
-          </ul>
-          <p>Different from Git:</p>
-          <ul>
-            <li>No remote repositories</li>
-            <li>No `push`, `pull`, `fetch`, or `clone`</li>
-            <li>No collaboration or team workflow</li>
-            <li>Safe checkpoints and rollback are first-class</li>
-            <li>Verification, provenance, lineages, and artifacts are product features</li>
-          </ul>
-        </article>
-      </section>
-
-      <section class="grid">
-        <article class="panel">
-          <h2>Local and offline constraints</h2>
-          <p>
-            `lit` is meant for one machine. Every workflow is local. Nothing in the
-            current product design depends on a network connection.
-          </p>
-          <ul>
-            <li>No server process</li>
-            <li>No cloud storage</li>
-            <li>No account system</li>
-            <li>No synchronization between computers</li>
-          </ul>
-        </article>
-
-        <article class="panel" id="limitations">
-          <h2>Limitations and non-goals</h2>
-          <ul>
-            <li>`lit export` is a Git bridge, not a full Git transport or object-compatibility layer.</li>
-            <li>Conflict handling is manual: `lit` writes markers and preserves state.</li>
-            <li>The desktop UI is optional and requires the <code>gui</code> dependency extra.</li>
-            <li>The product is intentionally scoped to one-machine local execution workflows.</li>
-            <li>Remote hosting, collaboration, cloud sync, and network workflows are non-goals.</li>
-          </ul>
-        </article>
-      </section>
-
-      <section class="panel">
-        <h2>Open locally</h2>
-        <p>
-          This site is static. Open <code>website/index.html</code> directly in a browser.
-          No build step, framework, or local server is required.
-        </p>
+      <section id="limits" class="panel">
+        <h2>Limitations and non-goals</h2>
+        <ul>
+          <li>The repository is still in the bootstrap stage.</li>
+          <li>Staging, commit history, diff, restore, branch switching, merge, and rebase are not implemented yet.</li>
+          <li>Remote workflows are not planned.</li>
+          <li>Cloud sync, accounts, and network-dependent features are out of scope.</li>
+        </ul>
       </section>
     </main>
   </body>

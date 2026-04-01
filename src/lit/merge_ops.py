@@ -4,8 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
-from lit.commits import CommitRecord, serialize_commit
-from lit.index import IndexState
+from lit.domain import OperationKind, OperationStatus, ProvenanceRecord
 from lit.refs import branch_ref
 from lit.repository import Repository, TrackedFile
 
@@ -20,66 +19,122 @@ class MergeResult:
 
 def merge_revision(repository: Repository, revision: str) -> MergeResult:
     _ensure_operation_ready(repository)
-    current_commit = repository.current_commit_id()
-    if current_commit is None:
-        raise ValueError("merge requires at least one commit on the current branch")
-
-    target_commit = repository.resolve_revision(revision)
-    if target_commit is None:
-        raise ValueError(f"unknown revision: {revision}")
-
-    if target_commit == current_commit:
-        return MergeResult(status="noop", message="Already up to date.")
-
-    base_commit = repository.merge_base(current_commit, target_commit)
-    if base_commit == target_commit:
-        return MergeResult(status="noop", message="Already up to date.")
-
-    target_ref = _resolve_target_ref(repository, revision)
-    if base_commit == current_commit:
-        repository.write_branch(_current_branch(repository), target_commit)
-        repository.apply_commit(target_commit, baseline_commit=current_commit)
-        repository.clear_merge()
-        return MergeResult(
-            status="fast_forward",
-            message=f"Fast-forwarded to {target_commit[:12]}.",
-            commit_id=target_commit,
+    branch_name = _current_branch(repository)
+    with repository._mutation(OperationKind.MERGE.value, message=f"merge {revision}"):
+        operation = repository._begin_operation(
+            OperationKind.MERGE,
+            message=f"merge {revision}",
+            lineage_id=branch_name,
         )
+        try:
+            current_commit = repository.current_commit_id()
+            if current_commit is None:
+                raise ValueError("merge requires at least one commit on the current branch")
 
-    base_tree = repository.read_commit_tree(base_commit)
-    current_tree = repository.read_commit_tree(current_commit)
-    target_tree = repository.read_commit_tree(target_commit)
-    plan = _merge_trees(repository, base_tree, current_tree, target_tree)
+            target_commit = repository.resolve_revision(revision)
+            if target_commit is None:
+                raise ValueError(f"unknown revision: {revision}")
 
-    repository.apply_tree(plan.files, baseline=current_tree)
-    if plan.conflicts:
-        _write_conflicts(repository, plan.conflicts)
-        repository.begin_merge(
-            base_commit=base_commit or "",
-            current_commit=current_commit,
-            target_commit=target_commit,
-            target_ref=target_ref,
-            conflicts=plan.conflict_paths,
-        )
-        return MergeResult(
-            status="conflict",
-            message="Merge stopped with conflicts.",
-            conflicts=plan.conflict_paths,
-        )
+            if target_commit == current_commit:
+                repository._finish_operation(
+                    operation,
+                    status=OperationStatus.SUCCEEDED,
+                    revision_id=current_commit,
+                    lineage_id=branch_name,
+                    message="Already up to date.",
+                )
+                return MergeResult(status="noop", message="Already up to date.")
 
-    commit_id = _write_commit(
-        repository,
-        tree=plan.files,
-        parents=(current_commit, target_commit),
-        message=f"Merge {revision} into {_current_branch(repository)}",
-    )
-    repository.apply_commit(commit_id, baseline_commit=current_commit)
-    repository.clear_merge()
-    return MergeResult(
-        status="merged",
-        message=f"Merge commit created: {commit_id[:12]}",
-        commit_id=commit_id,
-    )
+            base_commit = repository.merge_base(current_commit, target_commit)
+            if base_commit == target_commit:
+                repository._finish_operation(
+                    operation,
+                    status=OperationStatus.SUCCEEDED,
+                    revision_id=current_commit,
+                    lineage_id=branch_name,
+                    message="Already up to date.",
+                )
+                return MergeResult(status="noop", message="Already up to date.")
+
+            target_ref = _resolve_target_ref(repository, revision)
+            if base_commit == current_commit:
+                repository.write_branch(branch_name, target_commit)
+                repository.apply_commit(target_commit, baseline_commit=current_commit)
+                repository.clear_merge()
+                repository._ensure_lineage(branch_name, head_revision=target_commit)
+                repository._finish_operation(
+                    operation,
+                    status=OperationStatus.SUCCEEDED,
+                    revision_id=target_commit,
+                    lineage_id=branch_name,
+                )
+                return MergeResult(
+                    status="fast_forward",
+                    message=f"Fast-forwarded to {target_commit[:12]}.",
+                    commit_id=target_commit,
+                )
+
+            base_tree = repository.read_commit_tree(base_commit)
+            current_tree = repository.read_commit_tree(current_commit)
+            target_tree = repository.read_commit_tree(target_commit)
+            plan = _merge_trees(repository, base_tree, current_tree, target_tree)
+
+            repository.apply_tree(plan.files, baseline=current_tree)
+            if plan.conflicts:
+                _write_conflicts(repository, plan.conflicts)
+                repository.begin_merge(
+                    base_commit=base_commit or "",
+                    current_commit=current_commit,
+                    target_commit=target_commit,
+                    target_ref=target_ref,
+                    conflicts=plan.conflict_paths,
+                )
+                repository._finish_operation(
+                    operation,
+                    status=OperationStatus.FAILED,
+                    revision_id=current_commit,
+                    lineage_id=branch_name,
+                    message="Merge stopped with conflicts.",
+                )
+                return MergeResult(
+                    status="conflict",
+                    message="Merge stopped with conflicts.",
+                    conflicts=plan.conflict_paths,
+                )
+
+            commit_id = repository.create_revision_from_tree(
+                tree=plan.files,
+                parents=(current_commit, target_commit),
+                message=f"Merge {revision} into {branch_name}",
+                provenance=ProvenanceRecord(
+                    actor_role="merge",
+                    actor_id="lit",
+                    lineage_id=branch_name,
+                    committed_at=None,
+                    origin_commit=current_commit,
+                ),
+            )
+            repository.apply_commit(commit_id, baseline_commit=current_commit)
+            repository.clear_merge()
+            repository._finish_operation(
+                operation,
+                status=OperationStatus.SUCCEEDED,
+                revision_id=commit_id,
+                lineage_id=branch_name,
+            )
+            return MergeResult(
+                status="merged",
+                message=f"Merge commit created: {commit_id[:12]}",
+                commit_id=commit_id,
+            )
+        except Exception as error:
+            repository._finish_operation(
+                operation,
+                status=OperationStatus.FAILED,
+                lineage_id=branch_name,
+                message=str(error),
+            )
+            raise
 
 
 @dataclass(frozen=True)
@@ -181,22 +236,7 @@ def _write_conflicts(repository: Repository, conflicts: tuple[ConflictFile, ...]
     for conflict in conflicts:
         target = repository.root / Path(conflict.path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(conflict.content, encoding="utf-8")
-
-
-def _write_commit(
-    repository: Repository,
-    *,
-    tree: Mapping[str, TrackedFile],
-    parents: tuple[str, ...],
-    message: str,
-) -> str:
-    tree_id = repository._store_tree(tree)
-    record = CommitRecord(tree=tree_id, parents=parents, message=message)
-    commit_id = repository.store_object("commits", serialize_commit(record))
-    repository.write_branch(_current_branch(repository), commit_id)
-    repository.write_index(IndexState())
-    return commit_id
+        repository.write_working_text(conflict.path, conflict.content)
 
 
 def _resolve_target_ref(repository: Repository, revision: str) -> str | None:

@@ -9,6 +9,10 @@ description = "Local execution VCS for autonomous coding workflows on one machin
 requires-python = ">=3.12"
 dependencies = []
 
+# Install contract:
+# - Preferred CLI: `lit` (console script on PATH after install)
+# - No-PATH fallback: `python -m lit` (module entrypoint)
+# - Optional GUI: `pip install "lit[gui]"` then run `lit-gui`
 [project.optional-dependencies]
 gui = ["PySide6>=6.8"]
 

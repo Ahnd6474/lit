@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_pyproject_declares_lit_gui_entrypoint_and_optional_pyside6_extra() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
 
+    assert project["scripts"]["lit"] == "lit.cli:main"
     assert project["scripts"]["lit-gui"] == "lit_gui.app:main"
     assert project["optional-dependencies"]["gui"] == ["PySide6>=6.8"]
     assert project["dependencies"] == []

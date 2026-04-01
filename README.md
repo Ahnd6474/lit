@@ -1,49 +1,49 @@
 # lit
 
-`lit` means "local git." It is a lightweight, local-only, offline-only version control prototype for one computer.
+`lit` means "local git". It is a lightweight, local-only, offline-only version control prototype for one computer.
 
-The project goal is simple: keep Git-like local checkpoints and branch workflows without any server, account, remote, sync service, or network dependency.
+The repository currently provides a working bootstrap command, `lit init`, plus reserved command names for the rest of the planned workflow. The README and website describe both the current verified behavior and the intended direction, with the current limitations called out clearly.
 
-## Current status
+## What lit is
 
-Today, the verified CLI supports repository bootstrap:
-
-- `lit init`
-
-The rest of the Git-like command names already exist in the CLI, but they are reserved and **not implemented yet**:
-
-- `lit add`
-- `lit commit`
-- `lit log`
-- `lit status`
-- `lit diff`
-- `lit restore`
-- `lit checkout`
-- `lit branch`
-- `lit merge`
-- `lit rebase`
-
-If you run one of those reserved commands now, `lit` prints a "not implemented yet" message and exits with a non-zero status.
+- A local checkpointing and version control tool for a single machine.
+- A Git-like CLI with a simpler scope.
+- A project that stores its repository data in a deterministic `.lit/` folder.
+- A prototype designed to work with no network, account, server, sync service, or remote repository.
 
 ## Why local-only and offline-only
 
-`lit` is intentionally narrow.
+`lit` is meant for people who want fast local history without bringing in hosting, remotes, or collaboration infrastructure.
 
-- It works on a single machine.
-- It is designed to work fully offline.
-- It does not have `push`, `pull`, `fetch`, `clone`, remotes, accounts, or collaboration features.
-- It keeps the storage model deterministic and easy to inspect inside `.lit/`.
+- No `push`, `pull`, `fetch`, or `clone`.
+- No cloud sync.
+- No account, login, token, or background service.
+- No online dependency once the tool is installed.
+- One repository lives fully inside one working folder on one computer.
 
-This makes `lit` a good fit for fast local checkpoints, experiments, and learning, especially when you do not want a hosted workflow.
+That narrow scope keeps the tool small and makes the repository format easier to inspect and reason about.
 
-## Installation
+## Current status
 
-`lit` currently targets Python 3.12 or newer.
+As of this prototype revision:
+
+- `lit init` works and creates a deterministic `.lit/` repository layout.
+- `add`, `commit`, `log`, `status`, `diff`, `restore`, `checkout`, `branch`, `merge`, and `rebase` are present as reserved CLI commands.
+- Those reserved commands currently print `` `lit <command>` is reserved but not implemented yet. `` and exit with code `2`.
+
+The docs below keep the planned workflow visible because those command names are already fixed in the CLI, but only the `init` behavior is implemented today.
+
+## Install and run locally
+
+`lit` requires Python `3.12+`.
+
+### Option 1: Run from source without installing a script
 
 ```bash
 python -m venv .venv
-. .venv/bin/activate
+source .venv/bin/activate
 pip install -e .
+python -m lit init my-project
 ```
 
 On Windows PowerShell:
@@ -52,112 +52,174 @@ On Windows PowerShell:
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -e .
+python -m lit init my-project
 ```
 
-After installation, either of these should work:
+### Option 2: Install the `lit` command locally
 
 ```bash
-lit --help
-python -m lit --help
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+lit init my-project
 ```
 
 ## Quick start
 
-Create a new repository in the current folder:
+Create a new folder and initialize `.lit` inside it:
 
 ```bash
-python -m lit init .
+mkdir demo-project
+cd demo-project
+lit init
 ```
 
-Create a new repository in another folder:
+Expected output:
+
+```text
+Initialized empty lit repository in /path/to/demo-project/.lit
+```
+
+You can also choose the initial branch name:
 
 ```bash
-python -m lit init my-project
+lit init --branch trunk
 ```
 
-Successful bootstrap creates a `.lit/` directory with deterministic local storage files:
+Re-running `lit init` in the same folder keeps the existing repository and prints a reinitialization message.
 
-- `.lit/config.json`
-- `.lit/HEAD`
-- `.lit/index.json`
-- `.lit/objects/blobs`
-- `.lit/objects/trees`
-- `.lit/objects/commits`
-- `.lit/refs/heads`
-- `.lit/refs/tags`
-- `.lit/state/merge.json`
-- `.lit/state/rebase.json`
+## Main commands
 
-## Command overview
-
-| Command | Status | What it means |
+| Command | Status today | Notes |
 | --- | --- | --- |
-| `lit init` | Works now | Create or reinitialize a local repository. |
-| `lit add` | Reserved | Planned staging command for files. |
-| `lit commit` | Reserved | Planned checkpoint creation command. |
-| `lit log` | Reserved | Planned history viewer. |
-| `lit status` | Reserved | Planned working tree summary. |
-| `lit diff` | Reserved | Planned file comparison command. |
-| `lit restore` | Reserved | Planned file restore command. |
-| `lit checkout` | Reserved | Planned branch or commit switch command. |
-| `lit branch` | Reserved | Planned branch management command. |
-| `lit merge` | Reserved | Planned local branch merge command. |
-| `lit rebase` | Reserved | Planned local rebase command. |
+| `lit init [path]` | Working | Creates `.lit/`, `HEAD`, `index.json`, object folders, refs, and merge/rebase state files. |
+| `lit add` | Reserved | Planned staging command. Not implemented yet. |
+| `lit commit` | Reserved | Planned checkpoint creation command. Not implemented yet. |
+| `lit log` | Reserved | Planned history viewer. Not implemented yet. |
+| `lit status` | Reserved | Planned working tree summary. Not implemented yet. |
+| `lit diff` | Reserved | Planned local comparison command. Not implemented yet. |
+| `lit restore` | Reserved | Planned file restore command. Not implemented yet. |
+| `lit checkout` | Reserved | Planned branch or commit switching command. Not implemented yet. |
+| `lit branch` | Reserved | Planned branch management command. Not implemented yet. |
+| `lit merge` | Reserved | Planned local merge command. Not implemented yet. |
+| `lit rebase` | Reserved | Planned local rebase command. Not implemented yet. |
 
-## Beginner workflow
+## Beginner-friendly workflow
 
-The intended workflow is Git-like, but only the first step is available today.
+This is the intended local workflow once the reserved commands are implemented:
 
-1. Run `python -m lit init .`
-2. Edit files in your project
-3. Run `lit add <files>` once staging is implemented
-4. Run `lit commit -m "message"` once commit support lands
-5. Create a side branch with `lit branch`
-6. Merge or rebase locally with `lit merge` or `lit rebase`
-7. Restore files or move between checkpoints with `lit restore` or `lit checkout`
+1. `lit init` to create the repository.
+2. `lit add` to stage changed files.
+3. `lit commit -m "message"` to save a checkpoint.
+4. `lit branch feature-name` to create a side branch.
+5. `lit checkout feature-name` to switch to it.
+6. `lit merge feature-name` to bring work back together locally.
+7. `lit rebase main` to replay local work on top of another branch when that fits better.
+8. `lit restore <path>` to discard a local file change.
 
-Right now, steps 3 through 7 are documentation for the planned workflow only. They are not implemented yet.
+Today, only step 1 is operational. The rest are planned and already reserved in the command-line interface so naming stays stable as the implementation grows.
 
-## Git similarities and differences
+## Example session
 
-Similarities:
+### What you can do right now
 
-- familiar command names
-- local repository metadata in a hidden directory
-- planned staging, commit, branch, merge, and rebase flow
-- deterministic object and reference storage
+```bash
+mkdir notes
+cd notes
+lit init
+```
 
-Differences:
+That creates a `.lit/` directory with the repository metadata inside your local project folder.
 
-- strictly local-only
-- fully offline-only by design
-- no remotes and no network operations
-- narrower scope than Git
-- current implementation is still at the bootstrap stage
+### What the intended future flow looks like
+
+```bash
+lit init
+lit add journal.txt
+lit commit -m "Create first note"
+lit branch experiment
+lit checkout experiment
+lit add ideas.txt
+lit commit -m "Draft experiments"
+lit checkout main
+lit merge experiment
+lit rebase main
+lit restore ideas.txt
+```
+
+Treat that sequence as a roadmap example, not a promise of current behavior in this revision.
+
+## Git similarities
+
+- Similar command names and mental model.
+- A repository metadata directory inside the working tree.
+- Planned staging, commit, branch, merge, rebase, restore, and checkout flow.
+- Deterministic object and ref storage intended for local history.
+
+## Git differences
+
+- `lit` is intentionally local-only.
+- No remote hosting workflow exists.
+- No collaboration features are planned.
+- The current prototype is much smaller in scope than Git.
+- The on-disk layout is simplified for readability and predictable local behavior.
+
+## Repository layout
+
+After `lit init`, the repository contains:
+
+```text
+.lit/
+  HEAD
+  config.json
+  index.json
+  objects/
+    blobs/
+    commits/
+    trees/
+  refs/
+    heads/
+    tags/
+  state/
+    merge.json
+    rebase.json
+```
+
+Notable details from the current implementation:
+
+- `config.json` stores `default_branch` and `schema_version`.
+- `HEAD` points to `refs/heads/<branch>`.
+- `refs/heads/<branch>` starts empty until commits exist.
+- `merge.json` and `rebase.json` start as `null`.
+- Object identifiers use SHA-256 hashes of raw bytes.
 
 ## Local docs website
 
-A simple static docs site lives in `website/`.
+A simple static site lives in `website/`.
 
-- Open `website/index.html` directly in a browser, or
-- serve it locally with `python -m http.server --directory website 8000`
+- Open `website/index.html` directly in a browser.
+- Or serve it locally with `python -m http.server` and open the shown local URL.
+- No build step, package manager, or framework is required.
 
-The website repeats the beginner guide in a format that is easy to browse locally without extra tooling.
-
-## Current limitations
+## Limitations and non-goals
 
 Current limitations:
 
-- only `lit init` is implemented today
-- the Git-like workflow is planned but not available yet
-- there is no object writing flow for staged files or commits yet
-- there is no working tree diff, restore, branch switching, merge execution, or rebase execution yet
+- Only `init` is implemented.
+- There is no verified staging, commit history, diffing, restore, branch switching, merge, or rebase behavior yet.
+- The docs include planned workflows, but those sections are clearly marked as planned.
 
 Non-goals:
 
-- cloud sync
-- remotes
-- multi-user collaboration
-- hosted accounts
-- background services
-- heavy infrastructure
+- Any remote or hosted workflow.
+- Multi-user collaboration features.
+- Accounts, authentication, permissions, or network sync.
+- Heavy infrastructure such as database servers or background daemons.
+
+## Verification
+
+This documentation is aligned with the currently verified bootstrap implementation and its test suite. Run:
+
+```bash
+python -m pytest
+```

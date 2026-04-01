@@ -181,6 +181,56 @@ def test_workflow_resume_policy_and_backend_verification_defaults(tmp_path: Path
     assert verification.command_identity == "smoke-default"
 
 
+def test_backend_service_merge_and_rebase_resume_through_shared_boundary(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    service = LitBackendService()
+
+    merge_repo = Repository.create(root)
+    story = root / "story.txt"
+
+    base_commit = _commit_story(merge_repo, story, "base\n", "base", "main")
+    merge_repo.create_branch("feature", start_point=base_commit)
+
+    main_commit = _commit_story(merge_repo, story, "main change\n", "main", "main")
+    merge_repo.set_head_ref(branch_ref("feature"))
+    merge_repo.apply_commit(base_commit, baseline_commit=main_commit)
+    _commit_story(merge_repo, story, "feature change\n", "feature", "feature")
+    merge_repo.set_head_ref(branch_ref("main"))
+    merge_repo.apply_commit(main_commit)
+
+    conflicted_merge = service.merge_revision(root, "feature")
+    assert conflicted_merge.status == "conflict"
+    assert service.get_resume_state(root) is not None
+
+    story.write_text("resolved merge\n", encoding="utf-8")
+    resumed_merge = service.merge_revision(root, "feature")
+
+    assert resumed_merge.status == "merged"
+    assert service.get_resume_state(root) is None
+
+    rebase_root = tmp_path / "rebase-repo"
+    rebase_repo = Repository.create(rebase_root)
+    rebase_story = rebase_root / "story.txt"
+
+    rebase_base = _commit_story(rebase_repo, rebase_story, "base\n", "base", "main")
+    rebase_repo.create_branch("feature", start_point=rebase_base)
+
+    rebase_main = _commit_story(rebase_repo, rebase_story, "main change\n", "main", "main")
+    rebase_repo.set_head_ref(branch_ref("feature"))
+    rebase_repo.apply_commit(rebase_base, baseline_commit=rebase_main)
+    _commit_story(rebase_repo, rebase_story, "feature change\n", "feature", "feature")
+
+    conflicted_rebase = service.rebase_onto(rebase_root, "main")
+    assert conflicted_rebase.status == "conflict"
+    assert service.get_resume_state(rebase_root) is not None
+
+    rebase_story.write_text("resolved rebase\n", encoding="utf-8")
+    resumed_rebase = service.rebase_onto(rebase_root, "main")
+
+    assert resumed_rebase.status == "rebased"
+    assert service.get_resume_state(rebase_root) is None
+
+
 def _commit_story(
     repository: Repository,
     story: Path,

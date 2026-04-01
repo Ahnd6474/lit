@@ -144,6 +144,27 @@ def test_merge_conflict_snapshot_reports_operation_and_supports_abort(tmp_path: 
     assert "Merge state cleared." in snapshot.changes.detail.guidance.body
 
 
+def test_merge_action_resumes_conflicted_merge_through_backend_boundary(tmp_path: Path) -> None:
+    repo = Repository.create(tmp_path)
+    _prepare_merge_conflict(repo, tmp_path)
+
+    session = LitRepositorySession(tmp_path)
+    session.open_repository(tmp_path)
+    snapshot = session.merge("feature")
+
+    assert snapshot.repository is not None
+    assert snapshot.repository.operation is not None
+    assert snapshot.repository.operation.kind == "merge"
+
+    (tmp_path / "story.txt").write_text("resolved merge\n", encoding="utf-8")
+    snapshot = session.merge("feature")
+
+    assert snapshot.repository is not None
+    assert snapshot.repository.operation is None
+    assert snapshot.repository.status_text == "Working tree clean."
+    assert "Merge commit created" in snapshot.changes.detail.guidance.body
+
+
 def test_rebase_conflict_snapshot_reports_operation_and_supports_abort(tmp_path: Path) -> None:
     repo = Repository.create(tmp_path)
     _prepare_rebase_conflict(repo, tmp_path)
@@ -168,6 +189,27 @@ def test_rebase_conflict_snapshot_reports_operation_and_supports_abort(tmp_path:
     assert snapshot.repository.status_text == "Working tree clean."
     assert (tmp_path / "story.txt").read_text(encoding="utf-8") == "feature change\n"
     assert "Rebase state cleared." in snapshot.changes.detail.guidance.body
+
+
+def test_rebase_action_resumes_conflicted_rebase_through_backend_boundary(tmp_path: Path) -> None:
+    repo = Repository.create(tmp_path)
+    _prepare_rebase_conflict(repo, tmp_path)
+
+    session = LitRepositorySession(tmp_path)
+    session.open_repository(tmp_path)
+    snapshot = session.rebase("main")
+
+    assert snapshot.repository is not None
+    assert snapshot.repository.operation is not None
+    assert snapshot.repository.operation.kind == "rebase"
+
+    (tmp_path / "story.txt").write_text("resolved rebase\n", encoding="utf-8")
+    snapshot = session.rebase("main")
+
+    assert snapshot.repository is not None
+    assert snapshot.repository.operation is None
+    assert snapshot.repository.status_text == "Working tree clean."
+    assert "Rebased onto" in snapshot.changes.detail.guidance.body
 
 
 def test_session_release_surface_methods_refresh_checkpoint_verification_and_lineage_state(

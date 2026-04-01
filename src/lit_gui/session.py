@@ -13,10 +13,8 @@ from lit.backend_api import (
     RollbackRequest,
     VerifyRevisionRequest,
 )
-from lit.merge_ops import MergeResult
-from lit.rebase_ops import RebaseResult
 from lit.repository import CheckoutRecord, Repository
-from lit.workflows import WorkflowService
+from lit.workflows import MergeResult, RebaseResult
 from lit_gui.backend import SnapshotFeedback, SnapshotSelections, build_snapshot
 from lit_gui.contracts import RepositorySession, SessionSnapshot
 from lit_gui.persistence import RecentRepositoriesStore
@@ -368,15 +366,15 @@ class LitRepositorySession(RepositorySession):
         )
 
     def merge(self, revision: str) -> SessionSnapshot:
-        return self._run_workflow_action(
-            lambda workflow: workflow.merge_revision(revision),
+        return self._run_backend_action(
+            lambda backend: backend.merge_revision(self._root, revision),
             on_success=self._merge_feedback,
             update_selections=self._merge_selections,
         )
 
     def abort_merge(self) -> SessionSnapshot:
-        return self._run_workflow_action(
-            lambda workflow: workflow.abort_merge(),
+        return self._run_backend_action(
+            lambda backend: backend.abort_merge(self._root),
             on_success=lambda _: SnapshotFeedback(level="success", message="Merge state cleared."),
             update_selections=lambda commit_id: replace(
                 self._selections,
@@ -386,15 +384,15 @@ class LitRepositorySession(RepositorySession):
         )
 
     def rebase(self, revision: str) -> SessionSnapshot:
-        return self._run_workflow_action(
-            lambda workflow: workflow.rebase_onto(revision),
+        return self._run_backend_action(
+            lambda backend: backend.rebase_onto(self._root, revision),
             on_success=self._rebase_feedback,
             update_selections=self._rebase_selections,
         )
 
     def abort_rebase(self) -> SessionSnapshot:
-        return self._run_workflow_action(
-            lambda workflow: workflow.abort_rebase(),
+        return self._run_backend_action(
+            lambda backend: backend.abort_rebase(self._root),
             on_success=lambda _: SnapshotFeedback(level="success", message="Rebase state cleared."),
             update_selections=lambda commit_id: replace(
                 self._selections,
@@ -438,13 +436,25 @@ class LitRepositorySession(RepositorySession):
 
     def _run_workflow_action(
         self,
-        operation: Callable[[WorkflowService], _T],
+        operation: Callable[[LitBackendService], _T],
         *,
         on_success: Callable[[_T], SnapshotFeedback],
         update_selections: Callable[[_T], SnapshotSelections] | None = None,
     ) -> SessionSnapshot:
-        repository = self._repository
-        if repository is None:
+        return self._run_backend_action(
+            operation,
+            on_success=on_success,
+            update_selections=update_selections,
+        )
+
+    def _run_backend_action(
+        self,
+        operation: Callable[[LitBackendService], _T],
+        *,
+        on_success: Callable[[_T], SnapshotFeedback],
+        update_selections: Callable[[_T], SnapshotSelections] | None = None,
+    ) -> SessionSnapshot:
+        if self._repository is None:
             return self._rebuild_snapshot(
                 feedback=SnapshotFeedback(
                     level="error",
@@ -453,7 +463,7 @@ class LitRepositorySession(RepositorySession):
             )
 
         try:
-            result = operation(WorkflowService(repository))
+            result = operation(self._backend)
         except (FileNotFoundError, RuntimeError, ValueError) as error:
             self._repository = self._reload_repository(self._root)
             return self._rebuild_snapshot(

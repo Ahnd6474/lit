@@ -34,7 +34,7 @@ from lit.state import OperationState
 from lit.storage import write_json
 from lit.transactions import next_identifier, utc_now
 from lit.verification import VerificationStatusSummary
-from lit.workflows import WorkflowService
+from lit.workflows import MergeResult, RebaseResult, WorkflowService
 
 
 @dataclass(frozen=True, slots=True)
@@ -496,6 +496,30 @@ class BackendService(ABC):
         """Restore repository state to a selected or latest safe checkpoint."""
 
     @abstractmethod
+    def merge_revision(self, root: Path, revision: str) -> MergeResult:
+        """Start a merge or continue the active merge when the repository is resumable."""
+
+    @abstractmethod
+    def abort_merge(self, root: Path) -> str:
+        """Abort the active merge and return the restored revision identifier."""
+
+    @abstractmethod
+    def rebase_onto(self, root: Path, revision: str) -> RebaseResult:
+        """Start a rebase or continue the active rebase when the repository is resumable."""
+
+    @abstractmethod
+    def abort_rebase(self, root: Path) -> str:
+        """Abort the active rebase and return the restored revision identifier."""
+
+    @abstractmethod
+    def resume_operation(self, root: Path) -> MergeResult | RebaseResult:
+        """Resume the active merge or rebase through the shared workflow boundary."""
+
+    @abstractmethod
+    def abort_operation(self, root: Path) -> str:
+        """Abort the active merge or rebase through the shared workflow boundary."""
+
+    @abstractmethod
     def list_lineages(
         self,
         root: Path,
@@ -746,6 +770,44 @@ class LitBackendService(BackendService):
             lineage_id=checkpoint.provenance.lineage_id,
             message=checkpoint.name or checkpoint.note or "rolled back to checkpoint",
         )
+
+    def merge_revision(self, root: Path, revision: str) -> MergeResult:
+        repo = self._repository(root)
+        workflow = WorkflowService(repo)
+        resume_state = self._resume_state_for_repository(repo)
+        if resume_state is not None and resume_state.kind is OperationKind.MERGE:
+            return workflow.resume_operation()
+        return workflow.merge_revision(revision)
+
+    def abort_merge(self, root: Path) -> str:
+        repo = self._repository(root)
+        workflow = WorkflowService(repo)
+        resume_state = self._resume_state_for_repository(repo)
+        if resume_state is not None and resume_state.kind is not OperationKind.MERGE:
+            raise ValueError("Cannot abort merge while rebase is in progress.")
+        return workflow.abort_merge()
+
+    def rebase_onto(self, root: Path, revision: str) -> RebaseResult:
+        repo = self._repository(root)
+        workflow = WorkflowService(repo)
+        resume_state = self._resume_state_for_repository(repo)
+        if resume_state is not None and resume_state.kind is OperationKind.REBASE:
+            return workflow.resume_operation()
+        return workflow.rebase_onto(revision)
+
+    def abort_rebase(self, root: Path) -> str:
+        repo = self._repository(root)
+        workflow = WorkflowService(repo)
+        resume_state = self._resume_state_for_repository(repo)
+        if resume_state is not None and resume_state.kind is not OperationKind.REBASE:
+            raise ValueError("Cannot abort rebase while merge is in progress.")
+        return workflow.abort_rebase()
+
+    def resume_operation(self, root: Path) -> MergeResult | RebaseResult:
+        return WorkflowService(self._repository(root)).resume_operation()
+
+    def abort_operation(self, root: Path) -> str:
+        return WorkflowService(self._repository(root)).abort_operation()
 
     def list_lineages(
         self,

@@ -64,8 +64,21 @@ python -m lit --help
 
 ### 3) Optional: install the desktop GUI
 
+From a repository checkout (editable install):
+
 ```bash
 python -m pip install -e ".[gui]"
+```
+
+From a published build:
+
+```bash
+python -m pip install "lit[gui]"
+```
+
+Launch the app with:
+
+```bash
 lit-gui
 ```
 

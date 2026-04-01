@@ -12,7 +12,7 @@ dependencies = []
 # Install contract:
 # - Preferred CLI: `lit` (console script on PATH after install)
 # - No-PATH fallback: `python -m lit` (module entrypoint)
-# - Optional GUI: `pip install "lit[gui]"` then run `lit-gui`
+# - Optional GUI: `lit-gui` (requires the `gui` extra: `pip install "lit[gui]"` or `pip install -e ".[gui]"`)
 [project.optional-dependencies]
 gui = ["PySide6>=6.8"]
 

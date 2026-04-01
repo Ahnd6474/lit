@@ -4,10 +4,17 @@
 
 ## Run Locally
 
-From the repository root:
+From a repository checkout (run from the repository root):
 
 ```bash
 python -m pip install -e ".[gui]"
+lit-gui
+```
+
+From a published build:
+
+```bash
+python -m pip install "lit[gui]"
 lit-gui
 ```
 

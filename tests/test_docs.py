@@ -5,14 +5,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_readme_documents_current_bootstrap_scope() -> None:
+def test_readme_documents_current_local_scope() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert "local-only" in readme
-    assert "offline-only" in readme
-    assert "`lit init` works" in readme
-    assert "reserved but not implemented yet." in readme
-    assert "No `push`, `pull`, `fetch`, or `clone`." in readme
+    assert "offline-first" in readme
+    assert "What lit does today" in readme
+    assert "checkpoint" in readme
+    assert "verify" in readme
+    assert "lineage" in readme
+    assert "artifact" in readme
+    assert "lit-gui" in readme
+    assert "export" in readme
     assert "python -m pytest" in readme
 
 

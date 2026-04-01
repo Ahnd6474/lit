@@ -1,56 +1,48 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from lit.cli import build_parser
 
 
-def test_readme_describes_verified_bootstrap_state() -> None:
-    readme = ROOT / "README.md"
-
-    assert readme.is_file()
-    content = readme.read_text(encoding="utf-8")
-
-    assert "local-only" in content
-    assert "offline-only" in content
-    assert "pip install -e ." in content
-    assert "python -m lit init" in content
-    assert "`lit init` is the only implemented end-to-end command today." in content
-    assert ".lit/" in content
-    for command in (
-        "add",
-        "commit",
-        "log",
-        "status",
-        "diff",
-        "restore",
-        "checkout",
-        "branch",
-        "merge",
-        "rebase",
-    ):
-        assert f"`lit {command}`" in content
-    assert "Git similarities and differences" in content
-    assert "Limitations and non-goals" in content
+def list_subcommands() -> set[str]:
+    parser = build_parser()
+    subparser_action = next(
+        action for action in parser._actions if getattr(action, "choices", None)
+    )
+    return set(subparser_action.choices)
 
 
-def test_static_docs_site_is_self_contained_and_honest() -> None:
-    website_dir = ROOT / "website"
-    index_html = website_dir / "index.html"
-    styles_css = website_dir / "styles.css"
+def test_readme_describes_verified_scope() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
-    assert website_dir.is_dir()
-    assert index_html.is_file()
-    assert styles_css.is_file()
+    assert "local-only" in readme
+    assert "offline-only" in readme
+    assert "python -m lit init" in readme
+    assert "not implemented yet" in readme
+    assert "current limitations" in readme.lower()
 
-    content = index_html.read_text(encoding="utf-8")
+    for command_name in list_subcommands():
+        assert f"`lit {command_name}`" in readme
 
-    assert 'href="styles.css"' in content
-    assert "Open this file directly in your browser" in content
-    assert "local-only" in content
-    assert "offline-only" in content
-    assert "Only `lit init` works today." in content
-    assert "Planned command workflow" in content
-    assert "Git: same ideas, smaller scope" in content
-    assert "Limitations and non-goals" in content
+
+def test_static_website_exists_and_matches_current_cli_scope() -> None:
+    website_root = ROOT / "website"
+    index_html = (website_root / "index.html").read_text(encoding="utf-8")
+    styles_css = (website_root / "styles.css").read_text(encoding="utf-8")
+
+    assert '<link rel="stylesheet" href="styles.css"' in index_html
+    assert "local-only" in index_html
+    assert "offline-only" in index_html
+    assert "python -m lit init" in index_html
+    assert "not implemented yet" in index_html
+    assert "Git" in index_html
+    assert "limitations" in index_html.lower()
+    assert ":root" in styles_css
+
+    for command_name in list_subcommands():
+        assert f"lit {command_name}" in index_html

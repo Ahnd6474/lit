@@ -84,6 +84,103 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     add_json_flag(discard_parser)
     discard_parser.set_defaults(handler=run_discard)
 
+    workspace_parser = lineage_subparsers.add_parser(
+        "workspace",
+        help="Manage materialized lineage workspaces.",
+    )
+    workspace_subparsers = workspace_parser.add_subparsers(dest="workspace_command", required=True)
+    _register_workspace_subcommands(workspace_subparsers)
+
+    materialize_parser = lineage_subparsers.add_parser(
+        "materialize",
+        help="Materialize a lineage into a new workspace directory.",
+    )
+    materialize_parser.add_argument("lineage_id", help="Lineage identifier.")
+    materialize_parser.add_argument("path", help="Path to the new workspace root.")
+    materialize_parser.add_argument("--workspace-id", help="Explicit workspace identifier.")
+    add_json_flag(materialize_parser)
+    materialize_parser.set_defaults(handler=run_materialize)
+
+    create_workspace_parser = lineage_subparsers.add_parser(
+        "create-workspace",
+        help="Compatibility alias for materialize.",
+    )
+    create_workspace_parser.add_argument("lineage_id", help="Lineage identifier.")
+    create_workspace_parser.add_argument("path", help="Path to the new workspace root.")
+    create_workspace_parser.add_argument("--workspace-id", help="Explicit workspace identifier.")
+    add_json_flag(create_workspace_parser)
+    create_workspace_parser.set_defaults(handler=run_materialize)
+
+    attach_parser = lineage_subparsers.add_parser(
+        "attach",
+        help="Attach an existing workspace to a lineage.",
+    )
+    attach_parser.add_argument("lineage_id", help="Lineage identifier.")
+    attach_parser.add_argument("workspace_id", help="Workspace identifier.")
+    add_json_flag(attach_parser)
+    attach_parser.set_defaults(handler=run_attach)
+
+    list_workspaces_parser = lineage_subparsers.add_parser(
+        "list-workspaces",
+        help="List materialized workspaces.",
+    )
+    add_json_flag(list_workspaces_parser)
+    list_workspaces_parser.set_defaults(handler=run_list_workspaces)
+
+    gc_workspaces_parser = lineage_subparsers.add_parser(
+        "gc-workspaces",
+        help="Clean up workspace records for missing directories.",
+    )
+    add_json_flag(gc_workspaces_parser)
+    gc_workspaces_parser.set_defaults(handler=run_gc_workspaces)
+
+
+def _register_workspace_subcommands(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    materialize_parser = subparsers.add_parser(
+        "materialize",
+        help="Materialize a lineage into a new workspace directory.",
+    )
+    materialize_parser.add_argument("lineage_id", help="Lineage identifier.")
+    materialize_parser.add_argument("path", help="Path to the new workspace root.")
+    materialize_parser.add_argument("--workspace-id", help="Explicit workspace identifier.")
+    add_json_flag(materialize_parser)
+    materialize_parser.set_defaults(handler=run_materialize)
+
+    create_parser = subparsers.add_parser(
+        "create",
+        help="Alias for materialize.",
+    )
+    create_parser.add_argument("lineage_id", help="Lineage identifier.")
+    create_parser.add_argument("path", help="Path to the new workspace root.")
+    create_parser.add_argument("--workspace-id", help="Explicit workspace identifier.")
+    add_json_flag(create_parser)
+    create_parser.set_defaults(handler=run_materialize)
+
+    attach_parser = subparsers.add_parser(
+        "attach",
+        help="Attach an existing workspace to a lineage.",
+    )
+    attach_parser.add_argument("lineage_id", help="Lineage identifier.")
+    attach_parser.add_argument("workspace_id", help="Workspace identifier.")
+    add_json_flag(attach_parser)
+    attach_parser.set_defaults(handler=run_attach)
+
+    list_parser = subparsers.add_parser(
+        "list",
+        help="List persisted workspace records.",
+    )
+    add_json_flag(list_parser)
+    list_parser.set_defaults(handler=run_list_workspaces)
+
+    gc_parser = subparsers.add_parser(
+        "gc",
+        help="Clean up workspace records for missing directories.",
+    )
+    add_json_flag(gc_parser)
+    gc_parser.set_defaults(handler=run_gc_workspaces)
+
 
 def run_list(args: argparse.Namespace) -> int:
     repo = current_repository()
@@ -177,6 +274,75 @@ def run_discard(args: argparse.Namespace) -> int:
     )
     emit(args, lineage, lambda payload: f"discarded lineage {payload.lineage_id}")
     return 0
+
+
+def run_materialize(args: argparse.Namespace) -> int:
+    repo = current_repository()
+    workspace = repo.create_workspace(
+        args.lineage_id,
+        args.path,
+        workspace_id=args.workspace_id,
+    )
+    emit(
+        args,
+        workspace,
+        lambda payload: f"materialized lineage {payload.lineage_id} into {payload.workspace_root} (id={payload.workspace_id})",
+    )
+    return 0
+
+
+def run_attach(args: argparse.Namespace) -> int:
+    repo = current_repository()
+    workspace = repo.attach_workspace(args.lineage_id, args.workspace_id)
+    emit(
+        args,
+        workspace,
+        lambda payload: f"attached workspace {payload.workspace_id} to lineage {payload.lineage_id}",
+    )
+    return 0
+
+
+def run_list_workspaces(args: argparse.Namespace) -> int:
+    workspaces = current_repository().inspect_workspaces()
+    emit(
+        args,
+        {"workspaces": workspaces},
+        lambda payload: _render_workspace_list(payload["workspaces"]),
+    )
+    return 0
+
+
+def run_gc_workspaces(args: argparse.Namespace) -> int:
+    result = current_repository().gc_workspaces()
+    emit(
+        args,
+        result,
+        _render_workspace_gc,
+    )
+    return 0
+
+
+def _render_workspace_list(workspaces) -> str:
+    if not workspaces:
+        return "No workspaces recorded."
+    lines = []
+    for entry in workspaces:
+        ws = entry.workspace
+        state = "missing" if entry.missing_on_disk else "present"
+        lines.append(
+            f"{ws.workspace_id} lineage={ws.lineage_id} root={ws.workspace_root} "
+            f"head={short_id(ws.head_revision)} state={state}"
+        )
+    return "\n".join(lines)
+
+
+def _render_workspace_gc(result) -> str:
+    if not result.removed_workspace_ids:
+        return f"removed 0 workspace record(s) after scanning {result.scanned_count}"
+    return (
+        f"removed {len(result.removed_workspace_ids)} workspace record(s) "
+        f"after scanning {result.scanned_count}: {', '.join(result.removed_workspace_ids)}"
+    )
 
 
 def _render_lineage_list(lineages, *, current_lineage_id: str | None) -> str:

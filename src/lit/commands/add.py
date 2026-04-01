@@ -14,6 +14,13 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 
 def run(args: argparse.Namespace) -> int:
     repository = Repository.discover(Path.cwd())
+
+    try:
+        repository.validate_ownership(args.paths)
+    except ValueError as error:
+        print(f"error: {error}")
+        return 1
+
     staged = repository.stage(args.paths)
     print(f"staged {len(staged)} path(s)")
     return 0

@@ -1057,6 +1057,54 @@ class Repository:
 
         return LineageService.open(self.root).discard_lineage(lineage_id)
 
+    def validate_ownership(self, paths: Iterable[str | Path]) -> None:
+        from lit.lineage import LineageService
+
+        current_lineage = self.current_branch_name()
+        if current_lineage is None:
+            return
+        LineageService.open(self.root).validate_ownership(current_lineage, paths)
+
+    def list_workspaces(self) -> tuple[object, ...]:
+        from lit.lineage import LineageService
+
+        return LineageService.open(self.root).list_workspaces()
+
+    def inspect_workspaces(self) -> tuple[object, ...]:
+        from lit.lineage import LineageService
+
+        return LineageService.open(self.root).inspect_workspaces()
+
+    def get_workspace(self, workspace_id: str) -> object:
+        from lit.lineage import LineageService
+
+        return LineageService.open(self.root).get_workspace(workspace_id)
+
+    def create_workspace(
+        self,
+        lineage_id: str,
+        workspace_root: str | Path,
+        *,
+        workspace_id: str | None = None,
+    ) -> object:
+        from lit.lineage import LineageService
+
+        return LineageService.open(self.root).create_workspace(
+            lineage_id,
+            workspace_root,
+            workspace_id=workspace_id,
+        )
+
+    def attach_workspace(self, lineage_id: str, workspace_id: str) -> object:
+        from lit.lineage import LineageService
+
+        return LineageService.open(self.root).attach_workspace(lineage_id, workspace_id)
+
+    def gc_workspaces(self) -> object:
+        from lit.lineage import LineageService
+
+        return LineageService.open(self.root).gc_workspaces()
+
     def list_verifications(
         self,
         *,

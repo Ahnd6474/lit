@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from lit.domain import LineageRecord as DomainLineageRecord
 from lit.layout import LitLayout
 from lit.refs import delete_ref, normalize_branch_name, write_ref
-from lit.storage import FileMutationWriter, read_json, write_json
+from lit.storage import FileMutationWriter, delete_path, read_json, write_json
 from lit.transactions import JournaledTransaction, utc_now
 
 if TYPE_CHECKING:
@@ -72,6 +72,15 @@ def normalize_owned_path(path: str | Path) -> str:
     parts = normalized.split("/")
     if any(part in {"", ".", ".."} for part in parts):
         raise ValueError(f"invalid owned path: {path}")
+    return normalized
+
+
+def normalize_workspace_id(workspace_id: str | Path) -> str:
+    normalized = str(workspace_id).strip()
+    if not normalized:
+        raise ValueError("workspace_id is required")
+    if normalized in {".", ".."} or "/" in normalized or "\\" in normalized:
+        raise ValueError(f"invalid workspace_id: {workspace_id}")
     return normalized
 
 
@@ -254,6 +263,21 @@ class PromotionResult:
     preview: PromotionPreview
 
 
+@dataclass(frozen=True, slots=True)
+class WorkspaceInspection:
+    workspace: "ManagedWorkspace"
+    exists_on_disk: bool = False
+    missing_on_disk: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceGcResult:
+    scanned_count: int = 0
+    removed_workspace_ids: tuple[str, ...] = ()
+    removed: tuple[WorkspaceInspection, ...] = ()
+    retained: tuple[WorkspaceInspection, ...] = ()
+
+
 class PathReservationError(ValueError):
     def __init__(self, conflicts: tuple[ReservationConflict, ...]) -> None:
         self.conflicts = conflicts
@@ -374,6 +398,90 @@ def upsert_lineage_record(
     return updated
 
 
+@dataclass(frozen=True, slots=True)
+class ManagedWorkspace:
+    schema_version: int = 1
+    workspace_id: str | None = None
+    lineage_id: str | None = None
+    repository_root: str | None = None
+    workspace_root: str | None = None
+    head_revision: str | None = None
+    materialized_revision_id: str | None = None
+    base_checkpoint_id: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    materialized_at: str | None = None
+    attached_at: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "attached_at": self.attached_at,
+            "workspace_id": self.workspace_id,
+            "lineage_id": self.lineage_id,
+            "repository_root": self.repository_root,
+            "workspace_root": self.workspace_root,
+            "head_revision": self.head_revision,
+            "materialized_revision_id": self.materialized_revision_id,
+            "base_checkpoint_id": self.base_checkpoint_id,
+            "created_at": self.created_at,
+            "materialized_at": self.materialized_at,
+            "updated_at": self.updated_at,
+            "schema_version": self.schema_version,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object] | None) -> "ManagedWorkspace":
+        if not data:
+            return cls()
+        return cls(
+            schema_version=int(data.get("schema_version", 1)),
+            workspace_id=_optional_string(data.get("workspace_id")),
+            lineage_id=_optional_string(data.get("lineage_id")),
+            repository_root=_optional_string(data.get("repository_root")),
+            workspace_root=_optional_string(data.get("workspace_root")),
+            head_revision=_optional_string(data.get("head_revision")),
+            materialized_revision_id=_optional_string(data.get("materialized_revision_id")),
+            base_checkpoint_id=_optional_string(data.get("base_checkpoint_id")),
+            created_at=_optional_string(data.get("created_at")),
+            materialized_at=_optional_string(data.get("materialized_at")),
+            attached_at=_optional_string(data.get("attached_at")),
+            updated_at=_optional_string(data.get("updated_at")),
+        )
+
+
+def list_workspace_records(layout: LitLayout) -> tuple[ManagedWorkspace, ...]:
+    if not layout.workspaces.exists():
+        return ()
+    records = [
+        ManagedWorkspace.from_dict(read_json(path, default=None))
+        for path in sorted(layout.workspaces.glob("*.json"))
+    ]
+    records.sort(key=lambda record: (record.created_at or "", record.workspace_id or ""))
+    return tuple(records)
+
+
+def load_workspace_record(layout: LitLayout, workspace_id: str) -> ManagedWorkspace:
+    path = layout.workspace_path(normalize_workspace_id(workspace_id))
+    if not path.exists():
+        raise FileNotFoundError(f"workspace not found: {workspace_id}")
+    return ManagedWorkspace.from_dict(read_json(path, default=None))
+
+
+def write_workspace_record(
+    layout: LitLayout,
+    record: ManagedWorkspace,
+    *,
+    mutation: FileMutationWriter | None = None,
+) -> None:
+    if record.workspace_id is None:
+        raise ValueError("workspace_id is required")
+    write_json(
+        layout.workspace_path(normalize_workspace_id(record.workspace_id)),
+        record.to_dict(),
+        mutation=mutation,
+    )
+
+
 class LineageService:
     def __init__(self, root: str | Path) -> None:
         self.root = Path(root).resolve()
@@ -397,6 +505,33 @@ class LineageService:
 
     def inspect_lineage(self, lineage_id: str) -> ManagedLineage:
         return self.get_lineage(lineage_id)
+
+    def get_workspace(self, workspace_id: str) -> ManagedWorkspace:
+        return load_workspace_record(self.layout, workspace_id)
+
+    def inspect_workspace(self, workspace_id: str) -> WorkspaceInspection:
+        return self._inspect_workspace(self.get_workspace(workspace_id))
+
+    def validate_ownership(self, lineage_id: str, paths: Iterable[str | Path]) -> None:
+        try:
+            record = self.get_lineage(lineage_id)
+        except FileNotFoundError:
+            return
+        if not record.owned_paths:
+            return
+
+        violations: list[str] = []
+        for path in paths:
+            normalized = normalize_owned_path(path)
+            if not _path_within_scopes(normalized, record.owned_paths):
+                violations.append(normalized)
+        if not violations:
+            return
+        if len(violations) == 1:
+            raise ValueError(f"path {violations[0]} is not within owned paths for lineage {lineage_id}")
+        raise ValueError(
+            f"paths {', '.join(violations)} are not within owned paths for lineage {lineage_id}"
+        )
 
     def create_lineage(
         self,
@@ -469,6 +604,121 @@ class LineageService:
             record.lineage_id,
             head_revision=record.head_revision,
             last_switched_at=utc_now(),
+        )
+
+    def list_workspaces(self) -> tuple[ManagedWorkspace, ...]:
+        return list_workspace_records(self.layout)
+
+    def inspect_workspaces(self) -> tuple[WorkspaceInspection, ...]:
+        return tuple(self._inspect_workspace(record) for record in self.list_workspaces())
+
+    def create_workspace(
+        self,
+        lineage_id: str,
+        workspace_root: str | Path,
+        *,
+        workspace_id: str | None = None,
+    ) -> ManagedWorkspace:
+        from lit.transactions import next_identifier
+        from lit.repository import Repository
+
+        lineage = self.get_lineage(lineage_id)
+        resolved_root = Path(workspace_root).resolve()
+        ws_id = normalize_workspace_id(workspace_id or next_identifier("ws"))
+        if self.layout.workspace_path(ws_id).exists():
+            raise ValueError(f"workspace already exists: {ws_id}")
+        existing_workspace = self._workspace_for_root(resolved_root)
+        if existing_workspace is not None:
+            raise ValueError(
+                f"workspace root is already registered to {existing_workspace.workspace_id}: {resolved_root}"
+            )
+        if (resolved_root / ".lit").exists():
+            raise ValueError(f"workspace root already contains a .lit directory: {resolved_root}")
+        now = utc_now()
+        if resolved_root.exists():
+            if not resolved_root.is_dir():
+                raise ValueError(f"workspace root is not a directory: {resolved_root}")
+            if any(resolved_root.iterdir()):
+                raise ValueError(f"workspace root must be empty before materialization: {resolved_root}")
+        else:
+            resolved_root.mkdir(parents=True)
+
+        if lineage.head_revision:
+            repo = Repository.open(self.root)
+            files = repo.read_commit_tree(lineage.head_revision)
+            for path, tracked in files.items():
+                target = resolved_root / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(repo.read_object("blobs", tracked.digest))
+                if tracked.executable:
+                    mode = target.stat().st_mode
+                    target.chmod(mode | 0o111)
+
+        record = ManagedWorkspace(
+            workspace_id=ws_id,
+            lineage_id=lineage.lineage_id,
+            repository_root=self.root.as_posix(),
+            workspace_root=resolved_root.as_posix(),
+            head_revision=lineage.head_revision,
+            materialized_revision_id=lineage.head_revision,
+            base_checkpoint_id=lineage.base_checkpoint_id,
+            created_at=now,
+            materialized_at=now,
+            attached_at=now,
+            updated_at=now,
+        )
+
+        with JournaledTransaction(self.layout, kind="create-workspace", message=f"create workspace {ws_id}") as tx:
+            write_workspace_record(self.layout, record, mutation=tx)
+
+        return record
+
+    def attach_workspace(self, lineage_id: str, workspace_id: str) -> ManagedWorkspace:
+        lineage = self.get_lineage(lineage_id)
+        existing = self.get_workspace(workspace_id)
+        now = utc_now()
+        updated = ManagedWorkspace(
+            schema_version=existing.schema_version,
+            workspace_id=existing.workspace_id,
+            lineage_id=lineage.lineage_id,
+            repository_root=existing.repository_root,
+            workspace_root=existing.workspace_root,
+            head_revision=lineage.head_revision,
+            materialized_revision_id=existing.materialized_revision_id,
+            base_checkpoint_id=lineage.base_checkpoint_id,
+            created_at=existing.created_at,
+            materialized_at=existing.materialized_at,
+            attached_at=now,
+            updated_at=now,
+        )
+
+        with JournaledTransaction(
+            self.layout,
+            kind="attach-workspace",
+            message=f"attach workspace {existing.workspace_id} to {lineage_id}",
+        ) as tx:
+            write_workspace_record(self.layout, updated, mutation=tx)
+
+        return updated
+
+    def gc_workspaces(self) -> WorkspaceGcResult:
+        inspections = self.inspect_workspaces()
+        removed: list[WorkspaceInspection] = []
+        retained: list[WorkspaceInspection] = []
+        missing_records = [item for item in inspections if item.missing_on_disk]
+        if missing_records:
+            with JournaledTransaction(self.layout, kind="gc-workspaces", message="gc workspaces") as tx:
+                for item in missing_records:
+                    delete_path(self.layout.workspace_path(item.workspace.workspace_id or ""), mutation=tx)
+                    removed.append(item)
+        retained.extend(item for item in inspections if not item.missing_on_disk)
+        return WorkspaceGcResult(
+            scanned_count=len(inspections),
+            removed_workspace_ids=tuple(
+                item.workspace.workspace_id for item in removed if item.workspace.workspace_id is not None
+            ),
+            removed=tuple(removed),
+            retained=tuple(retained),
         )
 
     def preview_promotion_conflicts(
@@ -659,6 +909,23 @@ class LineageService:
 
         return Repository.open(self.root)
 
+    def _inspect_workspace(self, record: ManagedWorkspace) -> WorkspaceInspection:
+        exists_on_disk = False
+        if record.workspace_root is not None:
+            exists_on_disk = Path(record.workspace_root).exists()
+        return WorkspaceInspection(
+            workspace=record,
+            exists_on_disk=exists_on_disk,
+            missing_on_disk=record.workspace_root is not None and not exists_on_disk,
+        )
+
+    def _workspace_for_root(self, workspace_root: Path) -> ManagedWorkspace | None:
+        normalized_root = workspace_root.resolve().as_posix()
+        for record in self.list_workspaces():
+            if record.workspace_root == normalized_root:
+                return record
+        return None
+
     def _resolve_base_checkpoint(
         self,
         repo: "Repository",
@@ -778,6 +1045,7 @@ __all__ = [
     "LineageService",
     "LineageStatus",
     "ManagedLineage",
+    "ManagedWorkspace",
     "PathReservationError",
     "PromotionConflict",
     "PromotionConflictError",
@@ -785,9 +1053,15 @@ __all__ = [
     "PromotionPreview",
     "PromotionResult",
     "ReservationConflict",
+    "WorkspaceGcResult",
+    "WorkspaceInspection",
     "list_lineage_records",
+    "list_workspace_records",
     "load_lineage_record",
+    "load_workspace_record",
     "normalize_owned_path",
+    "normalize_workspace_id",
     "upsert_lineage_record",
     "write_lineage_record",
+    "write_workspace_record",
 ]

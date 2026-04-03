@@ -62,6 +62,12 @@ python -m lit --help
 
 `python -m lit` is the no-PATH fallback and always runs `lit` using the current Python interpreter.
 
+If you want a regular non-editable install from a checkout instead, use:
+
+```bash
+python -m pip install .
+```
+
 ### 3) Optional: install the desktop GUI
 
 From a repository checkout (editable install):
@@ -86,6 +92,28 @@ If `lit-gui` is not on your PATH, you can launch the same app with:
 
 ```bash
 python -m lit_gui.app
+```
+
+### 4) Build a wheel or source distribution
+
+If you want to produce installable artifacts for another environment:
+
+```bash
+python -m pip install build
+python -m build
+```
+
+This creates files under `dist/`, for example:
+
+```text
+dist/lit-1.0.0-py3-none-any.whl
+dist/lit-1.0.0.tar.gz
+```
+
+Install from the wheel with:
+
+```bash
+python -m pip install dist/lit-1.0.0-py3-none-any.whl
 ```
 
 ### PATH notes (especially on Windows)

@@ -6,8 +6,25 @@ build-backend = "setuptools.build_meta"
 name = "lit"
 version = "1.0.0"
 description = "Local execution VCS for autonomous coding workflows on one machine."
+readme = "README.md"
 requires-python = ">=3.12"
+keywords = ["cli", "local", "offline-first", "vcs", "version-control"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Version Control",
+]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Ahnd6474/lit"
+Documentation = "https://github.com/Ahnd6474/lit/blob/main/README.md"
+Repository = "https://github.com/Ahnd6474/lit"
+Issues = "https://github.com/Ahnd6474/lit/issues"
 
 # Install contract:
 # - Preferred CLI: `lit` (console script on PATH after install)

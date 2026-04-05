@@ -3,8 +3,8 @@
 Install contract:
 - Preferred CLI: `lit` console script.
 - No-PATH fallback: `python -m lit`.
-- Published distribution: `lit-local-vcs`.
-- Optional GUI: `lit-gui` (requires `pip install "lit-local-vcs[gui]"`).
+- Published distribution: `lit`.
+- Optional GUI: `lit-gui` (requires `pip install "lit[gui]"`).
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ def gui_main(argv: Sequence[str] | None = None) -> int:
         app = import_module("lit_gui.app")
     except ModuleNotFoundError as error:
         print(
-            'lit-gui requires the "gui" extra. Install with: pip install "lit-local-vcs[gui]"',
+            'lit-gui requires the "gui" extra. Install with: pip install "lit[gui]"',
             file=sys.stderr,
         )
         return 1

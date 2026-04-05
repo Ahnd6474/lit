@@ -23,7 +23,7 @@ python -m pip install -e .
 If you're installing from a published build instead of a repository checkout:
 
 ```bash
-python -m pip install lit-local-vcs
+python -m pip install lit
 ```
 
 If the `lit` command is not available on your PATH, the no-PATH fallback is:
@@ -41,7 +41,7 @@ python -m pip install -e ".[gui]"
 From a published build:
 
 ```bash
-python -m pip install "lit-local-vcs[gui]"
+python -m pip install "lit[gui]"
 ```
 
 This also installs `lit-gui` (with `python -m lit_gui.app` as the no-PATH fallback).

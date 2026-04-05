@@ -10,8 +10,8 @@ def test_release_docs_cover_distribution_name_and_publish_flow() -> None:
     release_doc = (ROOT / "docs" / "releasing.md").read_text(encoding="utf-8")
 
     assert "## [1.0.0] - 2026-04-03" in changelog
-    assert "lit-local-vcs" in changelog
-    assert "lit-local-vcs" in release_doc
+    assert "distribution name `lit`" in changelog
+    assert "ships to PyPI as `lit`." in release_doc
     assert "Python 3.11, 3.12, and 3.13" in release_doc
     assert "python -m tox" in release_doc
     assert "python -m tox -e pkg" in release_doc

@@ -1,6 +1,6 @@
 # Releasing lit
 
-This repository ships to PyPI as `lit-local-vcs`.
+This repository ships to PyPI as `lit`.
 
 Supported runtime versions are Python 3.11, 3.12, and 3.13.
 
@@ -39,7 +39,7 @@ python -m tox -e pkg
 If you want to sanity-check installation from a built artifact:
 
 ```bash
-python -m pip install --force-reinstall dist/lit_local_vcs-1.0.0-py3-none-any.whl
+python -m pip install --force-reinstall dist/lit-1.0.0-py3-none-any.whl
 lit --help
 python -m lit --help
 ```
@@ -48,7 +48,7 @@ python -m lit --help
 
 Configure trusted publishing in both PyPI and TestPyPI before the first release:
 
-1. Create the `lit-local-vcs` project on PyPI and TestPyPI.
+1. Create the `lit` project on PyPI and TestPyPI.
 2. In GitHub, create the `pypi` and `testpypi` environments.
 3. In PyPI, add a trusted publisher for this repository, the `release.yml` workflow, and the `pypi` environment.
 4. In TestPyPI, add a trusted publisher for this repository, the `testpypi.yml` workflow, and the `testpypi` environment.
@@ -78,8 +78,8 @@ The `release.yml` workflow then:
 Published install commands should use the distribution name, not the CLI name:
 
 ```bash
-python -m pip install lit-local-vcs
-python -m pip install "lit-local-vcs[gui]"
+python -m pip install lit
+python -m pip install "lit[gui]"
 ```
 
 ## Open-source note

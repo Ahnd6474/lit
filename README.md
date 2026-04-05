@@ -79,7 +79,7 @@ python -m pip install -e ".[gui]"
 From PyPI:
 
 ```bash
-python -m pip install "lit-local-vcs[gui]"
+python -m pip install "lit[gui]"
 ```
 
 Launch the app with:
@@ -106,14 +106,14 @@ python -m build
 This creates files under `dist/`, for example:
 
 ```text
-dist/lit_local_vcs-1.0.0-py3-none-any.whl
-dist/lit_local_vcs-1.0.0.tar.gz
+dist/lit-1.0.0-py3-none-any.whl
+dist/lit-1.0.0.tar.gz
 ```
 
 Install from the wheel with:
 
 ```bash
-python -m pip install dist/lit_local_vcs-1.0.0-py3-none-any.whl
+python -m pip install dist/lit-1.0.0-py3-none-any.whl
 ```
 
 ### PATH notes (especially on Windows)
@@ -122,13 +122,13 @@ If `lit` is not found after installing, it usually means you are running a diffe
 
 ### Published package name
 
-The PyPI distribution name is `lit-local-vcs`.
+The PyPI distribution name is `lit`.
 
 Install commands for published releases are:
 
 ```bash
-python -m pip install lit-local-vcs
-python -m pip install "lit-local-vcs[gui]"
+python -m pip install lit
+python -m pip install "lit[gui]"
 ```
 
 The installed commands are still `lit` and `lit-gui`.

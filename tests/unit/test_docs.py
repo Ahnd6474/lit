@@ -16,7 +16,7 @@ def test_readme_documents_current_local_scope() -> None:
     assert "lineage" in readme
     assert "artifact" in readme
     assert "lit-gui" in readme
-    assert "lit-local-vcs" in readme
+    assert "The PyPI distribution name is `lit`." in readme
     assert "export" in readme
     assert "python -m pytest" in readme
     assert "Python `3.11+`" in readme

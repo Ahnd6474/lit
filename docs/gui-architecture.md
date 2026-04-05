@@ -14,7 +14,7 @@ lit-gui
 From a published build:
 
 ```bash
-python -m pip install "lit[gui]"
+python -m pip install "jakal-lit[gui]"
 lit-gui
 ```
 

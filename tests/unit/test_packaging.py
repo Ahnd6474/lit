@@ -10,7 +10,7 @@ def test_pyproject_exposes_installable_package_metadata() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     project = pyproject["project"]
 
-    assert project["name"] == "lit"
+    assert project["name"] == "jakal-lit"
     assert project["readme"] == "README.md"
     assert project["requires-python"] == ">=3.11"
     assert project["scripts"]["lit"] == "lit.__main__:main"

@@ -7,7 +7,7 @@ name = "lit-local-vcs"
 version = "1.0.0"
 description = "Local execution VCS for autonomous coding workflows on one machine."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 keywords = ["cli", "local", "offline-first", "vcs", "version-control", "agent-workflows"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -15,7 +15,9 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Version Control",
 ]
 dependencies = []
@@ -35,7 +37,7 @@ Changelog = "https://github.com/Ahnd6474/lit/blob/main/CHANGELOG.md"
 #   `pip install "lit-local-vcs[gui]"` or `pip install -e ".[gui]"`)
 [project.optional-dependencies]
 gui = ["PySide6>=6.8"]
-dev = ["build>=1.2", "pytest>=8", "twine>=5.1"]
+dev = ["build>=1.2", "pytest>=8", "tox>=4.24", "twine>=5.1"]
 
 [project.scripts]
 lit = "lit.__main__:main"

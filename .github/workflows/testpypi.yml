@@ -1,13 +1,10 @@
-name: Release
+name: Publish TestPyPI
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
 
 jobs:
@@ -35,17 +32,11 @@ jobs:
           name: python-dist
           path: dist/*
 
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*
-          generate_release_notes: true
-
-  publish-pypi:
+  publish-testpypi:
     needs: build
     runs-on: ubuntu-latest
     environment:
-      name: pypi
+      name: testpypi
 
     steps:
       - name: Download release artifacts
@@ -54,5 +45,7 @@ jobs:
           name: python-dist
           path: dist
 
-      - name: Publish to PyPI
+      - name: Publish to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/

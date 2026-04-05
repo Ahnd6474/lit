@@ -19,6 +19,8 @@ def test_readme_documents_current_local_scope() -> None:
     assert "lit-local-vcs" in readme
     assert "export" in readme
     assert "python -m pytest" in readme
+    assert "Python `3.11+`" in readme
+    assert "python -m tox" in readme
     assert "docs/releasing.md" in readme
 
 

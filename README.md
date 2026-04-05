@@ -21,7 +21,7 @@ It is local-only, offline-first, and intentionally narrower than Git. Repository
 
 ## Install
 
-`lit` requires Python `3.12+`.
+`lit` requires Python `3.11+`.
 
 The recommended workflow is an editable install into a virtual environment. This installs the `lit` command (a console script) into that environment, so you can run `lit ...` once the environment is active.
 
@@ -299,5 +299,14 @@ Run the test suite with:
 ```bash
 python -m pytest
 ```
+
+Run the supported multi-version matrix with:
+
+```bash
+python -m pip install -e ".[dev]"
+python -m tox
+```
+
+`tox` targets Python 3.11, 3.12, 3.13, plus a packaging check environment. Missing local interpreters are skipped so one machine can still exercise the subset it has installed.
 
 Release and publish steps are documented in [`docs/releasing.md`](docs/releasing.md).

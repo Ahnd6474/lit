@@ -2,6 +2,8 @@
 
 This repository ships to PyPI as `lit-local-vcs`.
 
+Supported runtime versions are Python 3.11, 3.12, and 3.13.
+
 The installed commands remain:
 
 - `lit`
@@ -23,9 +25,15 @@ From the repository root:
 
 ```bash
 python -m pip install -e ".[dev,gui]"
-python -m pytest
-python -m build
-python -m twine check dist/*
+python -m tox
+```
+
+`tox` runs the supported interpreter matrix when available locally and also executes the packaging build plus `twine check`.
+
+If you want to run only the packaging validation:
+
+```bash
+python -m tox -e pkg
 ```
 
 If you want to sanity-check installation from a built artifact:
@@ -36,11 +44,26 @@ lit --help
 python -m lit --help
 ```
 
+## Trusted publishing setup
+
+Configure trusted publishing in both PyPI and TestPyPI before the first release:
+
+1. Create the `lit-local-vcs` project on PyPI and TestPyPI.
+2. In GitHub, create the `pypi` and `testpypi` environments.
+3. In PyPI, add a trusted publisher for this repository, the `release.yml` workflow, and the `pypi` environment.
+4. In TestPyPI, add a trusted publisher for this repository, the `testpypi.yml` workflow, and the `testpypi` environment.
+
+The repository includes two publish workflows:
+
+- `testpypi.yml` for a manual dry run to TestPyPI
+- `release.yml` for tag-based GitHub Release creation and live PyPI publishing
+
 ## Tag and publish
 
 1. Commit the release changes.
-2. Create an annotated tag such as `v1.0.0`.
-3. Push the branch and tag to GitHub.
+2. Optionally run the `Publish TestPyPI` workflow from GitHub Actions.
+3. Create an annotated tag such as `v1.0.0`.
+4. Push the branch and tag to GitHub.
 
 The `release.yml` workflow then:
 
@@ -63,4 +86,3 @@ python -m pip install "lit-local-vcs[gui]"
 
 This repository does not currently declare a license file in the distribution metadata.
 If you intend a public open-source release, add the license you want before publishing.
-

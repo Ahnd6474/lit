@@ -12,11 +12,19 @@ def test_pyproject_exposes_installable_package_metadata() -> None:
 
     assert project["name"] == "lit-local-vcs"
     assert project["readme"] == "README.md"
-    assert project["requires-python"] == ">=3.12"
+    assert project["requires-python"] == ">=3.11"
     assert project["scripts"]["lit"] == "lit.__main__:main"
     assert project["scripts"]["lit-gui"] == "lit.__main__:gui_main"
     assert project["optional-dependencies"]["gui"] == ["PySide6>=6.8"]
-    assert project["optional-dependencies"]["dev"] == ["build>=1.2", "pytest>=8", "twine>=5.1"]
+    assert project["optional-dependencies"]["dev"] == [
+        "build>=1.2",
+        "pytest>=8",
+        "tox>=4.24",
+        "twine>=5.1",
+    ]
+    assert "Programming Language :: Python :: 3.11" in project["classifiers"]
+    assert "Programming Language :: Python :: 3.12" in project["classifiers"]
+    assert "Programming Language :: Python :: 3.13" in project["classifiers"]
     assert project["urls"]["Homepage"] == "https://github.com/Ahnd6474/lit"
     assert project["urls"]["Changelog"] == "https://github.com/Ahnd6474/lit/blob/main/CHANGELOG.md"
 

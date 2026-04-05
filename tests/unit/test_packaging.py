@@ -10,19 +10,22 @@ def test_pyproject_exposes_installable_package_metadata() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     project = pyproject["project"]
 
-    assert project["name"] == "lit"
+    assert project["name"] == "lit-local-vcs"
     assert project["readme"] == "README.md"
     assert project["requires-python"] == ">=3.12"
     assert project["scripts"]["lit"] == "lit.__main__:main"
     assert project["scripts"]["lit-gui"] == "lit.__main__:gui_main"
     assert project["optional-dependencies"]["gui"] == ["PySide6>=6.8"]
+    assert project["optional-dependencies"]["dev"] == ["build>=1.2", "pytest>=8", "twine>=5.1"]
     assert project["urls"]["Homepage"] == "https://github.com/Ahnd6474/lit"
+    assert project["urls"]["Changelog"] == "https://github.com/Ahnd6474/lit/blob/main/CHANGELOG.md"
 
 
 def test_manifest_includes_distribution_docs_and_tests() -> None:
     manifest = (ROOT / "MANIFEST.in").read_text(encoding="utf-8")
 
     assert "include README.md" in manifest
+    assert "include CHANGELOG.md" in manifest
     assert "recursive-include docs *.md" in manifest
     assert "recursive-include tests *.py" in manifest
     assert "recursive-include website *.html *.css" in manifest

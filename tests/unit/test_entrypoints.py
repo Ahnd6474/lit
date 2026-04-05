@@ -23,4 +23,4 @@ def test_gui_entrypoint_prompts_for_gui_extra(monkeypatch: pytest.MonkeyPatch, c
     monkeypatch.setattr(importlib, "import_module", _missing_pyside6)
 
     assert entrypoint.gui_main([]) == 1
-    assert 'pip install "lit[gui]"' in capsys.readouterr().err
+    assert 'pip install "lit-local-vcs[gui]"' in capsys.readouterr().err

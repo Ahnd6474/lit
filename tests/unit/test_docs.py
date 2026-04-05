@@ -16,8 +16,10 @@ def test_readme_documents_current_local_scope() -> None:
     assert "lineage" in readme
     assert "artifact" in readme
     assert "lit-gui" in readme
+    assert "lit-local-vcs" in readme
     assert "export" in readme
     assert "python -m pytest" in readme
+    assert "docs/releasing.md" in readme
 
 
 def test_static_website_exists_and_matches_current_cli_status() -> None:

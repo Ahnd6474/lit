@@ -76,10 +76,10 @@ From a repository checkout (editable install):
 python -m pip install -e ".[gui]"
 ```
 
-From a published build:
+From PyPI:
 
 ```bash
-python -m pip install "lit[gui]"
+python -m pip install "lit-local-vcs[gui]"
 ```
 
 Launch the app with:
@@ -106,19 +106,32 @@ python -m build
 This creates files under `dist/`, for example:
 
 ```text
-dist/lit-1.0.0-py3-none-any.whl
-dist/lit-1.0.0.tar.gz
+dist/lit_local_vcs-1.0.0-py3-none-any.whl
+dist/lit_local_vcs-1.0.0.tar.gz
 ```
 
 Install from the wheel with:
 
 ```bash
-python -m pip install dist/lit-1.0.0-py3-none-any.whl
+python -m pip install dist/lit_local_vcs-1.0.0-py3-none-any.whl
 ```
 
 ### PATH notes (especially on Windows)
 
 If `lit` is not found after installing, it usually means you are running a different Python environment than the one you installed into (for example: a different venv, or no venv). Use `python -m lit ...` to avoid PATH issues, and prefer `python -m pip ...` so you install into the same interpreter you are running.
+
+### Published package name
+
+The PyPI distribution name is `lit-local-vcs`.
+
+Install commands for published releases are:
+
+```bash
+python -m pip install lit-local-vcs
+python -m pip install "lit-local-vcs[gui]"
+```
+
+The installed commands are still `lit` and `lit-gui`.
 
 ## Quick start
 
@@ -286,3 +299,5 @@ Run the test suite with:
 ```bash
 python -m pytest
 ```
+
+Release and publish steps are documented in [`docs/releasing.md`](docs/releasing.md).

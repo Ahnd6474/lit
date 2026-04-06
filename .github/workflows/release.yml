@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write
 
 jobs:
   build:
@@ -52,6 +51,14 @@ jobs:
       name: pypi
 
     steps:
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install twine
+        run: python -m pip install --upgrade twine
+
       - name: Download release artifacts
         uses: actions/download-artifact@v8
         with:
@@ -59,4 +66,7 @@ jobs:
           path: dist
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: python -m twine upload dist/*
